@@ -1,14 +1,14 @@
-This is a C++ implementation of Support Distribution Machines, as described in:
+This is a C++ implementation of Support Distribution Machines, as described by:
 
-    Barnabas Poczos, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider.
-    Support Distribution Machines.
-    Technical report, Carnegie Mellon University, 2012.
-    [arXiv:1202.0302](http://arxiv.org/abs/1202.0302)
-    http://www.autonlab.org/autonweb/20612.html
+Barnabas Poczos, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider, 2012.
+_Support Distribution Machines._
+Technical report, Carnegie Mellon University.
+[arXiv:1202.0302](http://arxiv.org/abs/1202.0302).
 
 The code was written by Dougal J. Sutherland.
 
 Requirements:
+
   * [np-divs](https://github.com/dougalsutherland/np-divs/) for nonparametric
     divergence estimation
   * [LibSVM](http://www.csie.ntu.edu.tw/~cjlin/libsvm/) for support vector
