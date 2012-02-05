@@ -7,7 +7,8 @@ Technical report, Carnegie Mellon University.
 
 The code was written by Dougal J. Sutherland.
 
-Requirements:
+Requirements
+------------
 
   * [np-divs](https://github.com/dougalsutherland/np-divs/) for nonparametric
     divergence estimation
@@ -15,3 +16,19 @@ Requirements:
     machines
   * [Boost](http://boost.org)
   * [CMake](http://cmake.org)
+  * BLAS and LAPACK implementations
+
+Installation
+------------
+
+    mkdir build; cd build
+    cmake ..
+    make
+    make runtests # optional, requires HDF5
+    make install
+
+This will install the shared library named e.g. `libsdm.so` (depending on
+platform) and header files. By default, these will be placed in `/usr/local`;
+to install to a different location, use something like:
+
+    cmake .. -DCMAKE_INSTALL_PREFIX=$HOME

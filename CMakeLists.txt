@@ -40,3 +40,4 @@ link_directories(${LAPACK_LIBRARY_DIRS})
 
 
 add_subdirectory(sdm)
+add_subdirectory(test)
