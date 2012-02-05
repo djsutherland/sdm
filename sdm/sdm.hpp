@@ -33,18 +33,47 @@
 #include "sdm/basics.hpp"
 #include "sdm/kernels.hpp"
 
+#include <vector>
+
 #include <flann/util/matrix.h>
 #include <svm.h>
 
-namespace SDM{
+namespace SDM {
 
 template <typename Scalar>
 class SDM {
-    svm_model *svm;
+    svm_model &svm;
     Kernel &kernel;
 
-    flann::Matrix<Scalar> *training_bags;
+    const flann::Matrix<Scalar> *training_bags;
     size_t num_training;
+
+    public:
+        SDM(svm_model &svm, Kernel &kernel,
+            const flann::Matrix<Scalar> *training_bags, size_t num_training)
+        :
+            svm(svm), kernel(kernel),
+            training_bags(training_bags), num_training(num_training)
+        { }
+
+        std::vector<bool> predict(
+                const flann::Matrix<Scalar> *test_dists, size_t num_test);
+
+        std::vector<bool> predict(
+                const flann::Matrix<Scalar> *test_dists, size_t num_test,
+                std::vector<double> &values);
+
+
+        // TODO: a mass-training method for more than one Kernel
+        static SDM train(
+                const flann::Matrix<Scalar> *training_bags, size_t num_train,
+                const std::vector<bool> &labels,
+                const Kernel &kernel,
+                // const NPDivs::DivParams &div_params,
+                const svm_parameter &svm_params
+                // cross-validation options
+        );
+
 };
 
 }

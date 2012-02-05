@@ -1,4 +1,5 @@
 add_library(sdm SHARED
+    sdm.cpp
     kernels.cpp
     kernel_projection.cpp
 )

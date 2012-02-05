@@ -28,70 +28,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#ifndef KERNELS_HPP_
-#define KERNELS_HPP_
 #include "sdm/basics.hpp"
 
-#include <string>
-
-#include <np-divs/div-funcs/div_func.hpp>
+#include "sdm/sdm.hpp"
 
 namespace SDM {
 
-// TODO this should be copyable, but need DivFunc to be first
-class Kernel {
-    protected:
-        NPDivs::DivFunc &div_func;
+template class SDM<float>;
+template class SDM<double>;
 
-    public:
-        Kernel(NPDivs::DivFunc &div_func) : div_func(div_func) {}
-        virtual ~Kernel() {}
-
-        virtual std::string name() const = 0;
-
-        NPDivs::DivFunc& getDivFunc() const { return div_func; }
-
-        virtual double transformDivergence(double div) const = 0;
-
-        virtual void transformDivergences(double* div, size_t n) const {
-            for (size_t i = 0; i < n; i++)
-                for (size_t j = 0; j < n; j++)
-                    div[i*n + j] = this->transformDivergence(div[i*n + j]);
-        }
-};
-
-
-class LinearKernel : public Kernel {
-    typedef Kernel super;
-
-    public:
-        LinearKernel(NPDivs::DivFunc &div_func) : super(div_func) {}
-
-        virtual std::string name() const {
-            return "Linear(" + div_func.name() + ")";
-        }
-
-        virtual double transformDivergence(double div) const { return div; }
-        virtual void transformDivergences(double* div, size_t n) const { }
-};
-
-
-class GaussianKernel : public Kernel {
-    typedef Kernel super;
-
-    protected:
-        double sigma;
-
-    public:
-        GaussianKernel(NPDivs::DivFunc &div_func, double sigma)
-            : super(div_func), sigma(sigma)
-            { }
-
-        virtual std::string name() const;
-
-        virtual double transformDivergence(double div) const;
-        // TODO implement vectorized gaussian kernel
-};
-
-}
-#endif
+} // end namespace
