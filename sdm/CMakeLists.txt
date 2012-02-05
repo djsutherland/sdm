@@ -1,10 +1,14 @@
 add_library(sdm SHARED
     kernels.cpp
+    kernel_projection.cpp
 )
-target_link_libraries(sdm ${LIBSVM_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(sdm
+    ${LIBSVM_LIBRARIES} ${Boost_LIBRARIES}
+    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES}
+)
 
 install(
-    TARGETS 
+    TARGETS sdm
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

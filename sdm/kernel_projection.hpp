@@ -28,27 +28,27 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
+#ifndef KERNEL_PROJECTION_HPP_
+#define KERNEL_PROJECTION_HPP_
 #include "sdm/basics.hpp"
-
-#include <cmath>
-#include <string>
-#include <boost/format.hpp>
-
-#include "sdm/kernels.hpp"
-
-using std::exp;
-using std::string;
-using boost::format;
 
 namespace SDM {
 
-string GaussianKernel::name() const {
-    return (format("Gaussian(%s, %g)") % div_func.name() % sigma).str();
-}
+/* Takes an n x n matrix stored as a flat array, symmetrizes it, and projects
+ * in-place to the nearest positive semidefinite matrix.
+ */
+void project_to_psd(double* matrix, size_t n);
 
-double GaussianKernel::transformDivergence(double div) const {
-    div /= sigma;
-    return exp(-.5 * div * div);
-}
+/* Takes an n x n matrix, stored as a flat array, symmetrizes it, and projects
+ * it in-place to the nearest positive semidefinite matrix, enforcing that the
+ * diagonal entries all be 1.
+ *
+ * Do at most max_iterations, and throw an error at the end if we still end
+ * up with an eigenvalue below eigenvalue_tolerance.
+ */
+void project_to_kernel(double* matrix, size_t n,
+        size_t max_iterations=50, double eigenvalue_tolerace=-1e-4);
 
-}
+} // end namespace
+
+#endif

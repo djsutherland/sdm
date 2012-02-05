@@ -20,13 +20,23 @@ include_directories(${BOOST_INCLUDE_DIRS})
 link_directories(${BOOST_LIBRARY_DIRS})
 
 find_package(PkgConfig REQUIRED)
-
 pkg_check_modules(FLANN REQUIRED flann)
 include_directories(${FLANN_INCLUDE_DIRS})
 link_directories(${FLANN_LIBRARY_DIRS})
 if(FLANN_CFLAGS)
     add_definitions(${FLANN_CFLAGS})
 endif(FLANN_CFLAGS)
+
+
+enable_language(Fortran)
+
+find_package(BLAS REQUIRED)
+include_directories(${BLAS_INCLUDE_DIRS})
+link_directories(${BLAS_LIBRARY_DIRS})
+
+find_package(LAPACK REQUIRED)
+include_directories(${LAPACK_INCLUDE_DIRS})
+link_directories(${LAPACK_LIBRARY_DIRS})
 
 
 add_subdirectory(sdm)
