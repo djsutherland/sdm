@@ -35,6 +35,7 @@
 
 #include <vector>
 
+#include <np-divs/div_params.hpp>
 #include <flann/util/matrix.h>
 #include <svm.h>
 
@@ -69,7 +70,7 @@ class SDM {
                 const flann::Matrix<Scalar> *training_bags, size_t num_train,
                 const std::vector<bool> &labels,
                 const Kernel &kernel,
-                // const NPDivs::DivParams &div_params,
+                const NPDivs::DivParams &div_params,
                 const svm_parameter &svm_params
                 // cross-validation options
         );
