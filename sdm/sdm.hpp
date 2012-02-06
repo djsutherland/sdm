@@ -89,22 +89,22 @@ SDM<Scalar> train_sdm(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
-// Template member function implementations
-
-void store_kernel_matrix(svm_problem &prob, double *divs, bool alloc) {
-    size_t n = prob.l;
-    if (alloc) prob.x = new svm_node*[n];
-
-    for (size_t i = 0; i < n; i++) {
-        if (alloc) prob.x[i] = new svm_node[n];
-        for (size_t j = 0; j < n; j++) {
-            prob.x[i][j].index = j;
-            prob.x[i][j].value = divs[i + j*n];
-        }
-    }
-}
+// Template function implementations
 
 namespace detail {
+    void store_kernel_matrix(svm_problem &prob, double *divs, bool alloc) {
+        size_t n = prob.l;
+        if (alloc) prob.x = new svm_node*[n];
+
+        for (size_t i = 0; i < n; i++) {
+            if (alloc) prob.x[i] = new svm_node[n];
+            for (size_t j = 0; j < n; j++) {
+                prob.x[i][j].index = j;
+                prob.x[i][j].value = divs[i + j*n];
+            }
+        }
+    }
+
     void print_null(const char *s) {}
 }
 
@@ -145,7 +145,7 @@ SDM<Scalar> train_sdm(
 
     // train an SVM on the whole thing
     // TODO after doing CV, won't need to alloc here
-    store_kernel_matrix(*prob, divs->ptr(), true);
+    detail::store_kernel_matrix(*prob, divs->ptr(), true);
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL)
         throw std::domain_error(error);
