@@ -123,8 +123,6 @@ SDM<Scalar> train_sdm(
     prob->l = num_train;
     prob->y = new double[num_train];
     std::copy(labels.begin(), labels.end(), prob->y);
-    // for (size_t i = 0; i < num_train; i++)
-    //     prob->y[i] = labels[i];
 
     // first compute divergences
     flann::Matrix<double>* divs =
