@@ -9,7 +9,7 @@
 
 namespace {
 
-using namespace SDM;
+using namespace sdm;
 using namespace std;
 
 TEST(UtilitiesTest, PSDProjection) {

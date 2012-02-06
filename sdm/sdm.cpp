@@ -32,7 +32,7 @@
 
 #include "sdm/sdm.hpp"
 
-namespace SDM {
+namespace sdm {
 
 template class SDM<float>;
 template class SDM<double>;

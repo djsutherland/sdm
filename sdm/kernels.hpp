@@ -36,7 +36,7 @@
 
 #include <np-divs/div-funcs/div_func.hpp>
 
-namespace SDM {
+namespace sdm {
 
 // TODO this should be copyable, but need DivFunc to be first
 class Kernel {

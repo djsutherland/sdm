@@ -40,7 +40,7 @@ using std::exp;
 using std::string;
 using boost::format;
 
-namespace SDM {
+namespace sdm {
 
 string GaussianKernel::name() const {
     return (format("Gaussian(%s, %g)") % div_func.name() % sigma).str();

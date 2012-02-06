@@ -39,7 +39,7 @@
 #include <flann/util/matrix.h>
 #include <svm.h>
 
-namespace SDM {
+namespace sdm {
 
 template <typename Scalar>
 class SDM {

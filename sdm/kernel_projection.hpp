@@ -32,7 +32,7 @@
 #define KERNEL_PROJECTION_HPP_
 #include "sdm/basics.hpp"
 
-namespace SDM {
+namespace sdm {
 
 /* Takes an n x n matrix stored as a flat array, symmetrizes it, and projects
  * in-place to the nearest positive semidefinite matrix.
