@@ -4,8 +4,11 @@ add_library(sdm SHARED
     kernel_projection.cpp
 )
 target_link_libraries(sdm
-    ${LIBSVM_LIBRARIES} ${Boost_LIBRARIES}
-    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES}
+    ${NPDIVS_LIBRARIES}
+    ${LIBSVM_LIBRARIES}
+    ${Boost_LIBRARIES}
+    ${BLAS_LIBRARIES}
+    ${LAPACK_LIBRARIES}
 )
 
 install(

@@ -9,7 +9,9 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 include_directories(${PROJECT_SOURCE_DIR})
 
-# TODO: find np-divs
+find_package(NPDivs REQUIRED)
+include_directories(${NPDIVS_INCLUDE_DIRS})
+link_directories(${NPDIVS_LIBRARY_DIRS})
 
 find_package(LibSVM REQUIRED)
 include_directories(${LIBSVM_INCLUDE_DIRS})
