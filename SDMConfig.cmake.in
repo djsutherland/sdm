@@ -1,0 +1,37 @@
+# Config file for SDM. Defines:
+#   SDM_INCLUDE_DIRS
+#   SDM_LIBRARY_DIRS
+#   SDM_LIBRARIES
+#   SDM_EXECUTABLE
+
+# compute paths
+get_filename_component(SDM_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+if (EXISTS "${SDM_CMAKE_DIR}/CMakeCache.txt")
+    # in build tree
+    include("${SDM_CMAKE_DIR}/SDMBuildTreeSettings.cmake")
+else()
+    set(SDM_INCLUDE_DIRS
+        "${SDM_CMAKE_DIR}/@CONF_REL_INCLUDE_DIR@"
+        @NPDIVS_INCLUDE_DIRS@
+        @LIBSVM_INCLUDE_DIRS@
+        @Boost_INCLUDE_DIRS@
+        @FLANN_INCLUDE_DIRS@
+        @BLAS_INCLUDE_DIRS@
+        @LAPACK_INCLUDE_DIRS@
+    )
+    set(SDM_LIBRARY_DIRS
+        "${SDM_CMAKE_DIR}/@CONF_REL_LIB_DIR@"
+        @NPDIVS_LIBRARY_DIRS@
+        @LIBSVM_LIBRARY_DIRS@
+        @Boost_LIBRARY_DIRS@
+        @FLANN_LIBRARY_DIRS@
+        @BLAS_LIBRARY_DIRS@
+        @LAPACK_LIBRARY_DIRS@
+    )
+endif()
+
+# library dependencies
+include("${SDM_CMAKE_DIR}/SDMLibraryDepends.cmake")
+
+set(SDM_LIBRARIES sdm)
+set(SDM_EXECUTABLE)
