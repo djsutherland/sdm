@@ -104,6 +104,10 @@ void store_kernel_matrix(svm_problem &prob, double *divs, bool alloc) {
     }
 }
 
+namespace detail {
+    void print_null(const char *s) {}
+}
+
 template <typename Scalar>
 SDM<Scalar> train_sdm(
         const flann::Matrix<Scalar> *training_bags, size_t num_train,
@@ -117,6 +121,9 @@ SDM<Scalar> train_sdm(
     svm_parameter svm_p = svm_params;
     svm_p.svm_type = C_SVC;
     svm_p.kernel_type = PRECOMPUTED;
+
+    // make libSVM shut up  -  TODO real logging
+    svm_set_print_string_function(&detail::print_null);
 
     // set up the basic svm_problem, except for the kernel values
     svm_problem *prob = new svm_problem;
