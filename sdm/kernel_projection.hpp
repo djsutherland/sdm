@@ -37,7 +37,7 @@ namespace sdm {
 /* Takes an n x n matrix stored as a flat array, symmetrizes it, and projects
  * in-place to the nearest positive semidefinite matrix.
  */
-void project_to_psd(double* matrix, size_t n);
+void project_to_symmetric_psd(double* matrix, size_t n);
 
 /* Takes an n x n matrix, stored as a flat array, symmetrizes it, and projects
  * it in-place to the nearest positive semidefinite matrix, enforcing that the
@@ -46,7 +46,7 @@ void project_to_psd(double* matrix, size_t n);
  * Do at most max_iterations, and throw an error at the end if we still end
  * up with an eigenvalue below eigenvalue_tolerance.
  */
-void project_to_kernel(double* matrix, size_t n,
+void project_to_covariance(double* matrix, size_t n,
         size_t max_iterations=50, double eigenvalue_tolerace=-1e-4);
 
 } // end namespace

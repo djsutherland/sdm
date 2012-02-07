@@ -159,7 +159,7 @@ SDM<Scalar> train_sdm(
 
     // build up our best kernel matrix
     kernel.transformDivergences(divs->ptr(), num_train);
-    project_to_kernel(divs->ptr(), num_train);
+    project_to_symmetric_psd(divs->ptr(), num_train);
 
     // train an SVM on the whole thing
     // TODO after doing CV, won't need to alloc here

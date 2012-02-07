@@ -160,7 +160,7 @@ void spectral_reconstruction(int n, double *eigvals, double *eigvecs,
 /* Takes an n x n matrix stored as a flat array, symmetrizes it, and projects
  * in-place to the nearest positive semidefinite matrix.
  */
-void project_to_psd(double* matrix, size_t n) {
+void project_to_symmetric_psd(double* matrix, size_t n) {
     double* eigvals = new double[n];
     double* eigvecs = new double[n*n];
 
@@ -184,7 +184,7 @@ void project_to_psd(double* matrix, size_t n) {
 /* Takes an n x n matrix, stored as a flat array, symmetrizes it, and projects
  * it in-place to the nearest positive semidefinite matrix with unit diagonal.
  */
-void project_to_kernel(double* matrix, size_t n, size_t maxsteps, double tol) {
+void project_to_covariance(double* matrix, size_t n, size_t steps, double tol) {
     // The alternating projection method (algorithm 3.3) of 
     //   Nicholas J. Higham, 2002.
     //   Computing the Nearest Correlation Matrix: a Problem from Finance.
@@ -211,7 +211,7 @@ void project_to_kernel(double* matrix, size_t n, size_t maxsteps, double tol) {
     try {
         symmetrize(matrix, n);
 
-        for (size_t iter = 0; iter < maxsteps; iter++) {
+        for (size_t iter = 0; iter < steps; iter++) {
             // remember the previous x
             std::copy(X, X + n*n, prev_X);
 
