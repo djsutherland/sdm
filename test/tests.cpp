@@ -114,7 +114,7 @@ TEST(SDMTest, BasicTrainingTesting) {
     svm_params.eps = 1e-3;
     svm_params.nr_weight = 0;
     svm_params.shrinking = 0;
-    svm_params.probability = 0;
+    svm_params.probability = 1;
 
     // train a model
     const SDM<double> &model =
