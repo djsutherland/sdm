@@ -34,63 +34,70 @@
 
 #include <string>
 
+#include <boost/utility.hpp>
+
 #include <np-divs/div-funcs/div_func.hpp>
 
 namespace sdm {
 
-// TODO this should be copyable, but need DivFunc to be first
-class Kernel {
-    protected:
-        NPDivs::DivFunc &div_func;
+// TODO this should be either copyable or cloneable
+class Kernel : boost::noncopyable {
+protected:
+    NPDivs::DivFunc &div_func;
 
-    public:
-        Kernel(NPDivs::DivFunc &div_func) : div_func(div_func) {}
-        virtual ~Kernel() {}
+public:
+    Kernel(NPDivs::DivFunc &div_func) : div_func(div_func) {}
+    virtual ~Kernel() {}
 
-        virtual std::string name() const = 0;
+    virtual std::string name() const = 0;
 
-        NPDivs::DivFunc& getDivFunc() const { return div_func; }
+    NPDivs::DivFunc& getDivFunc() const { return div_func; }
 
-        virtual double transformDivergence(double div) const = 0;
+    virtual double transformDivergence(double div) const = 0;
 
-        virtual void transformDivergences(double* div, size_t n) const {
-            for (size_t i = 0; i < n; i++)
-                for (size_t j = 0; j < n; j++)
-                    div[i*n + j] = this->transformDivergence(div[i*n + j]);
-        }
+    virtual void transformDivergences(double* div, size_t n) const {
+        this->transformDivergences(div, n, n);
+    }
+
+    virtual void transformDivergences(double* div, size_t m, size_t n)
+    const {
+        for (size_t i = 0; i < m; i++)
+            for (size_t j = 0; j < n; j++)
+                div[i*n + j] = this->transformDivergence(div[i*n + j]);
+    }
 };
 
 
 class LinearKernel : public Kernel {
     typedef Kernel super;
 
-    public:
-        LinearKernel(NPDivs::DivFunc &div_func) : super(div_func) {}
+public:
+    LinearKernel(NPDivs::DivFunc &div_func) : super(div_func) {}
 
-        virtual std::string name() const {
-            return "Linear(" + div_func.name() + ")";
-        }
+    virtual std::string name() const {
+        return "Linear(" + div_func.name() + ")";
+    }
 
-        virtual double transformDivergence(double div) const { return div; }
-        virtual void transformDivergences(double* div, size_t n) const { }
+    virtual double transformDivergence(double div) const { return div; }
+    virtual void transformDivergences(double* div, size_t m, size_t n) const { }
 };
 
 
 class GaussianKernel : public Kernel {
     typedef Kernel super;
 
-    protected:
-        double sigma;
+protected:
+    double sigma;
 
-    public:
-        GaussianKernel(NPDivs::DivFunc &div_func, double sigma)
-            : super(div_func), sigma(sigma)
-            { }
+public:
+    GaussianKernel(NPDivs::DivFunc &div_func, double sigma)
+        : super(div_func), sigma(sigma)
+        { }
 
-        virtual std::string name() const;
+    virtual std::string name() const;
 
-        virtual double transformDivergence(double div) const;
-        // TODO implement vectorized gaussian kernel
+    virtual double transformDivergence(double div) const;
+    // TODO implement vectorized gaussian kernel
 };
 
 }
