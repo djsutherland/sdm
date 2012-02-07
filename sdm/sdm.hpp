@@ -35,6 +35,8 @@
 #include "sdm/kernel_projection.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <iostream>
 #include <stdexcept>
 #include <vector>
 
@@ -51,36 +53,47 @@ class SDM {
     const svm_model &svm;
     const svm_problem &svm_prob; // needs to live at least as long as the model
     const Kernel &kernel;
+    const NPDivs::DivParams &div_params;
+    const size_t num_classes;
 
-    const flann::Matrix<Scalar> *training_bags;
-    size_t num_training;
+    const flann::Matrix<Scalar> *train_bags;
+    const size_t num_train;
 
     public:
         SDM(const svm_model &svm, const svm_problem &svm_prob,
-            const Kernel &kernel,
-            const flann::Matrix<Scalar> *training_bags, size_t num_training)
+            const Kernel &kernel, const NPDivs::DivParams &div_params,
+            size_t num_classes,
+            const flann::Matrix<Scalar> *train_bags, size_t num_train)
         :
-            svm(svm), svm_prob(svm_prob), kernel(kernel),
-            training_bags(training_bags), num_training(num_training)
+            svm(svm), svm_prob(svm_prob),
+            kernel(kernel), div_params(div_params), num_classes(num_classes),
+            train_bags(train_bags), num_train(num_train)
         { }
 
-        std::vector<bool> predict(
-                const flann::Matrix<Scalar> *test_dists, size_t num_test)
-            const;
+        int predict(const flann::Matrix<Scalar> &test_bag) const;
+        int predict(const flann::Matrix<Scalar> &test_bag,
+                std::vector<double> &vals) const;
 
-        std::vector<bool> predict(
-                const flann::Matrix<Scalar> *test_dists, size_t num_test,
-                std::vector<double> &values)
+        std::vector<int> predict(
+                const flann::Matrix<Scalar> *test_bags, size_t num_test)
+            const;
+        std::vector<int> predict(
+                const flann::Matrix<Scalar> *test_bags, size_t num_test,
+                std::vector< std::vector<double> > &vals)
             const;
 
 
 };
 
+// Function to train a new SDM. Note that YOU are responsible for deleting
+// the svm and svm_prob attributes.
+//
 // TODO: support multi-class classification
 // TODO: a mass-training method for more than one kernel
+// TODO: option to project based on test data too
 template <typename Scalar>
 SDM<Scalar> train_sdm(
-    const flann::Matrix<Scalar> *training_bags, size_t num_train,
+    const flann::Matrix<Scalar> *train_bags, size_t num_train,
     const std::vector<int> &labels,
     const Kernel &kernel,
     const NPDivs::DivParams &div_params,
@@ -89,7 +102,7 @@ SDM<Scalar> train_sdm(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
-// Template function implementations
+// Helper functions
 
 namespace detail {
     void store_kernel_matrix(svm_problem &prob, double *divs, bool alloc) {
@@ -97,20 +110,25 @@ namespace detail {
         if (alloc) prob.x = new svm_node*[n];
 
         for (size_t i = 0; i < n; i++) {
-            if (alloc) prob.x[i] = new svm_node[n];
+            if (alloc) prob.x[i] = new svm_node[n+2];
+            prob.x[i][0].value = i+1;
             for (size_t j = 0; j < n; j++) {
-                prob.x[i][j].index = j;
-                prob.x[i][j].value = divs[i + j*n];
+                prob.x[i][j+1].index = j+1;
+                prob.x[i][j+1].value = divs[i + j*n];
             }
+            prob.x[i][n+1].index = -1;
         }
     }
 
     void print_null(const char *s) {}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Training
+
 template <typename Scalar>
 SDM<Scalar> train_sdm(
-        const flann::Matrix<Scalar> *training_bags, size_t num_train,
+        const flann::Matrix<Scalar> *train_bags, size_t num_train,
         const std::vector<int> &labels,
         const Kernel &kernel,
         const NPDivs::DivParams &div_params,
@@ -134,7 +152,7 @@ SDM<Scalar> train_sdm(
     // first compute divergences
     flann::Matrix<double>* divs =
         NPDivs::alloc_matrix_array<double>(1, num_train, num_train);
-    np_divs(training_bags, num_train, kernel.getDivFunc(), divs,
+    np_divs(train_bags, num_train, kernel.getDivFunc(), divs,
             div_params, false);
 
     // TODO cross-validate over possibilities for the svm/kernel parameters
@@ -146,13 +164,109 @@ SDM<Scalar> train_sdm(
     // train an SVM on the whole thing
     // TODO after doing CV, won't need to alloc here
     detail::store_kernel_matrix(*prob, divs->ptr(), true);
+
     const char* error = svm_check_parameter(prob, &svm_p);
-    if (error != NULL)
+    if (error != NULL) {
+        std::cerr << "LibSVM parameter error: " << error << std::endl;
         throw std::domain_error(error);
+    }
     svm_model *svm = svm_train(prob, &svm_p);
 
-    return SDM<Scalar>(*svm, *prob, kernel, training_bags, num_train);
+    return SDM<Scalar>(*svm, *prob, kernel, div_params,
+            svm_get_nr_class(svm), train_bags, num_train);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Prediction
+
+template <typename Scalar>
+int SDM<Scalar>::predict(const flann::Matrix<Scalar> &test_bag) const {
+    std::vector< std::vector<double> > vals(1);
+    return this->predict(&test_bag, 1, vals)[0];
+}
+template <typename Scalar>
+int SDM<Scalar>::predict(const flann::Matrix<Scalar> &test_bag,
+        std::vector<double> &val)
+const {
+    std::vector< std::vector<double> > vals(1);
+    const std::vector<int> &pred_labels = this->predict(&test_bag, 1, vals);
+    val = vals[0];
+    return pred_labels[0];
+}
+
+template <typename Scalar>
+std::vector<int> SDM<Scalar>::predict(
+        const flann::Matrix<Scalar> *test_bags, size_t num_test)
+const {
+    std::vector< std::vector<double> > vals(num_test);
+    return this->predict(test_bags, num_test, vals);
+}
+
+template <typename Scalar>
+std::vector<int> SDM<Scalar>::predict(
+        const flann::Matrix<Scalar> *test_bags, size_t num_test,
+        std::vector< std::vector<double> > &vals)
+const {
+    // TODO: np_divs option to compute things both ways and/or save trees
+    // TODO: only compute divergences from support vectors
+    double fwd_data[num_train * num_test];
+    flann::Matrix<double> forward(fwd_data, num_train, num_test);
+
+    double bwd_data[num_test * num_train];
+    flann::Matrix<double> backward(bwd_data, num_test, num_train);
+
+    // compute divergences
+    NPDivs::np_divs(train_bags, num_train, test_bags, num_test,
+            kernel.getDivFunc(), &forward, div_params);
+    NPDivs::np_divs(test_bags, num_test, train_bags, num_train,
+            kernel.getDivFunc(), &backward, div_params);
+
+    // pass through the kernel
+    kernel.transformDivergences(forward.ptr(), num_train, num_test);
+    kernel.transformDivergences(backward.ptr(), num_test, num_train);
+
+    // we can't project here, so we just symmetrize
+    // TODO - symmetrize divergence estimates or kernel estimates?
+    for (size_t i = 0; i < num_test; i++)
+        for (size_t j = 0; j < num_train; j++)
+            backward[i][j] = (forward[j][i] + backward[i][j]) / 2.0;
+
+    const flann::Matrix<double> &divs = backward;
+
+    // figure out which prediction function we want to use
+    double (*pred_fn)(const svm_model*, const svm_node*, double*) =
+        svm_check_probability_model(&svm)
+        ? &svm_predict_probability : &svm_predict_values;
+
+    // we'll reuse this svm_node array for testing
+    svm_node *kernel_row = new svm_node[num_train+2];
+    for (size_t i = 0; i <= num_train; i++)
+        kernel_row[i].index = i;
+    kernel_row[num_train+1].index = -1;
+
+    // even though those fns return doubles, we'll round to an int because
+    // we want integer class labels
+    std::vector<int> pred_labels(num_test);
+
+    // predict!
+    for (size_t i = 0; i < num_test; i++) {
+        // fill in our kernel evaluations
+        kernel_row[0].value = -i - 1;
+        for (size_t j = 0; j < num_train; j++)
+            kernel_row[j+1].value = divs[i][j];
+
+        // get space to store our decision/probability values
+        vals[i].resize(num_classes);
+
+        // ask the SVM for a prediction
+        double res = pred_fn(&svm, kernel_row, &vals[i][0]);
+        pred_labels[i] = std::floor(res + .5);
+    }
+
+    return pred_labels;
+}
+
+
 
 } // end namespace
 
