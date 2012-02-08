@@ -9,7 +9,7 @@
 #include <np-divs/div_params.hpp>
 
 #include "sdm/kernel_projection.hpp"
-#include "sdm/kernels.hpp"
+#include "sdm/kernels/gaussian.hpp"
 #include "sdm/sdm.hpp"
 
 #include <svm.h>

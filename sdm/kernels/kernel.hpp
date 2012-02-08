@@ -28,27 +28,41 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
+#ifndef KERNELS_HPP_
+#define KERNELS_HPP_
 #include "sdm/basics.hpp"
 
-#include <cmath>
 #include <string>
-#include <boost/format.hpp>
 
-#include "sdm/kernels.hpp"
+#include <boost/utility.hpp>
 
-using std::exp;
-using std::string;
-using boost::format;
+#include <np-divs/div-funcs/div_func.hpp>
 
 namespace sdm {
 
-string GaussianKernel::name() const {
-    return (format("Gaussian(%s, %g)") % div_func.name() % sigma).str();
-}
+class Kernel : boost::noncopyable {
+protected:
+    NPDivs::DivFunc &div_func;
 
-double GaussianKernel::transformDivergence(double div) const {
-    div /= sigma;
-    return exp(-.5 * div * div);
-}
+public:
+    Kernel(NPDivs::DivFunc &div_func) : div_func(div_func) {}
+    virtual ~Kernel() {}
+
+    virtual std::string name() const = 0;
+
+    NPDivs::DivFunc& getDivFunc() const;
+
+    virtual double transformDivergence(double div) const = 0;
+    virtual void transformDivergences(double* div, size_t n) const;
+    virtual void transformDivergences(double* div, size_t m, size_t n) const;
+
+    Kernel* clone() const;
+
+private:
+    virtual Kernel* do_clone() const = 0;
+};
+
+inline Kernel* new_clone(const Kernel &kernel) { return kernel.clone(); }
 
 }
+#endif

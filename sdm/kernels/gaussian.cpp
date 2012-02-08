@@ -28,77 +28,26 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#ifndef KERNELS_HPP_
-#define KERNELS_HPP_
 #include "sdm/basics.hpp"
+#include "sdm/kernels/gaussian.hpp"
 
+#include <cmath>
 #include <string>
-
-#include <boost/utility.hpp>
-
-#include <np-divs/div-funcs/div_func.hpp>
+#include <boost/format.hpp>
 
 namespace sdm {
 
-// TODO this should be either copyable or cloneable
-class Kernel : boost::noncopyable {
-protected:
-    NPDivs::DivFunc &div_func;
+std::string GaussianKernel::name() const {
+    return (boost::format("Gaussian(%s, %g)") % div_func.name() % sigma).str();
+}
 
-public:
-    Kernel(NPDivs::DivFunc &div_func) : div_func(div_func) {}
-    virtual ~Kernel() {}
+double GaussianKernel::transformDivergence(double div) const {
+    div /= sigma;
+    return std::exp(-.5 * div * div);
+}
 
-    virtual std::string name() const = 0;
-
-    NPDivs::DivFunc& getDivFunc() const { return div_func; }
-
-    virtual double transformDivergence(double div) const = 0;
-
-    virtual void transformDivergences(double* div, size_t n) const {
-        this->transformDivergences(div, n, n);
-    }
-
-    virtual void transformDivergences(double* div, size_t m, size_t n)
-    const {
-        for (size_t i = 0; i < m; i++)
-            for (size_t j = 0; j < n; j++)
-                div[i*n + j] = this->transformDivergence(div[i*n + j]);
-    }
-};
-
-
-class LinearKernel : public Kernel {
-    typedef Kernel super;
-
-public:
-    LinearKernel(NPDivs::DivFunc &div_func) : super(div_func) {}
-
-    virtual std::string name() const {
-        return "Linear(" + div_func.name() + ")";
-    }
-
-    virtual double transformDivergence(double div) const { return div; }
-    virtual void transformDivergences(double* div, size_t m, size_t n) const { }
-};
-
-
-class GaussianKernel : public Kernel {
-    typedef Kernel super;
-
-protected:
-    double sigma;
-
-public:
-    GaussianKernel(NPDivs::DivFunc &div_func, double sigma)
-        : super(div_func), sigma(sigma)
-        { }
-
-    virtual std::string name() const;
-
-    virtual double transformDivergence(double div) const;
-    // TODO implement vectorized gaussian kernel
-};
+GaussianKernel* GaussianKernel::do_clone() const {
+    return new GaussianKernel(div_func, sigma);
+}
 
 }
-#endif

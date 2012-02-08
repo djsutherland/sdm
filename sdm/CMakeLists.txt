@@ -1,7 +1,9 @@
 add_library(sdm SHARED
     sdm.cpp
-    kernels.cpp
     kernel_projection.cpp
+    kernels/kernel.cpp
+    kernels/linear.cpp
+    kernels/gaussian.cpp
 )
 target_link_libraries(sdm
     ${NPDIVS_LIBRARIES}

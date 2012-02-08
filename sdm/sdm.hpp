@@ -31,7 +31,7 @@
 #ifndef SDM_HPP_
 #define SDM_HPP_
 #include "sdm/basics.hpp"
-#include "sdm/kernels.hpp"
+#include "sdm/kernels/kernel.hpp"
 #include "sdm/kernel_projection.hpp"
 
 #include <algorithm>
