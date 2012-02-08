@@ -98,7 +98,7 @@ TEST(SDMTest, BasicTrainingTesting) {
 
     // set up parameters
     NPDivs::DivL2 div_func;
-    GaussianKernel kernel(div_func, .0067);
+    GaussianKernel kernel(div_func, .00671082);
 
     NPDivs::DivParams div_params;
     div_params.num_threads = 1;
@@ -107,14 +107,19 @@ TEST(SDMTest, BasicTrainingTesting) {
     svm_parameter svm_params;
     svm_params.svm_type = C_SVC;
     svm_params.kernel_type = PRECOMPUTED;
-    svm_params.gamma = 0;
-    svm_params.degree = 0;
-    svm_params.cache_size = 10;
-    svm_params.C = .002;
+    svm_params.gamma = 0; // not used
+    svm_params.degree = 0; // not used
+    svm_params.coef0 = 0; // not used
+    svm_params.cache_size = 100; // in MB
+    svm_params.C = .00195312;
     svm_params.eps = 1e-3;
+    svm_params.nu = .5; // not used
+    svm_params.p = 0.1; // not used
     svm_params.nr_weight = 0;
-    svm_params.shrinking = 0;
-    svm_params.probability = 1;
+    svm_params.weight_label = NULL;
+    svm_params.weight = NULL;
+    svm_params.shrinking = 1;
+    svm_params.probability = 0;
 
     // train a model
     const SDM<double> &model =
@@ -135,10 +140,12 @@ TEST(SDMTest, BasicTrainingTesting) {
     vector<int> pred_lab = model.predict(test, 2, vals);
 
     EXPECT_EQ(0, pred_lab[0]);
-    cout << "Vals[0]: " << vals[0][0] << " " << vals[0][1] << endl;
+    EXPECT_NEAR(.0022, vals[0][0], .0005);
+    // cout << "Vals[0]: " << vals[0][0] << " " << vals[0][1] << endl;
 
     EXPECT_EQ(1, pred_lab[1]);
-    cout << "Vals[1]: " << vals[1][0] << " " << vals[1][1] << endl;
+    EXPECT_NEAR(-.0056, vals[1][0], .0005);
+    // cout << "Vals[1]: " << vals[1][0] << " " << vals[1][1] << endl;
 
 }
 
