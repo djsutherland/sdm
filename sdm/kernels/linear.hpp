@@ -33,13 +33,17 @@
 #include "sdm/basics.hpp"
 #include "sdm/kernels/kernel.hpp"
 
+#include <boost/ptr_container/ptr_vector.hpp>
+
 namespace sdm {
 
 class LinearKernel : public Kernel {
     typedef Kernel super;
 
 public:
-    LinearKernel(NPDivs::DivFunc &div_func) : super(div_func) {}
+    LinearKernel() {}
+
+    virtual boost::ptr_vector<Kernel> getTuningVector(double* divs, size_t n);
 
     virtual std::string name() const;
 
@@ -50,5 +54,18 @@ private:
     virtual LinearKernel* do_clone() const;
 };
 
-}
+class LinearKernelGroup : KernelGroup {
+public:
+    typedef KernelType LinearKernel;
+
+    LinearKernelGroup() {}
+
+    virtual const boost::ptr_vector<Kernel> getTuningVector(
+            double* divs, size_t n) const;
+
+private:
+    virtual LinearKernelGroup* do_clone() const;
+};
+
+} // end namespace
 #endif

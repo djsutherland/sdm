@@ -28,55 +28,37 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#ifndef KERNELS_HPP_
-#define KERNELS_HPP_
+#ifndef SDM_UTILS_HPP_
+#define SDM_UTILS_HPP_
 #include "sdm/basics.hpp"
 
-#include <string>
-
-#include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/utility.hpp>
-
-#include <np-divs/div-funcs/div_func.hpp>
+#include <algorithm>
+#include <stdexcept>
+#include <vector>
 
 namespace sdm {
 
-class Kernel : boost::noncopyable {
-public:
-    Kernel() {}
-    virtual ~Kernel() {}
+/* Finds the median of a vector with numeric type, reordering the vector
+ * in doing so. Throws std::domain_error if the vector is empty.
+ */
+template <typename T>
+double median(std::vector<T> &vec) {
+    size_t n = vec.size();
+    size_t mid = n / 2;
 
-    virtual std::string name() const = 0;
+    if (n == 0) {
+        throw std::domain_error("median of an empty list");
+    }
 
-    virtual double transformDivergence(double div) const = 0;
-    virtual void transformDivergences(double* divs, size_t n) const;
-    virtual void transformDivergences(double* divs, size_t m, size_t n) const;
+    std::nth_element(vec.begin(), vec.begin() + mid, vec.end());
 
-    Kernel* clone() const;
-
-private:
-    virtual Kernel* do_clone() const = 0;
-};
-
-class KernelGroup : boost::noncopyable {
-public:
-    typedef Kernel KernelType;
-
-    KernelGroup() {}
-    virtual ~KernelGroup() {}
-
-    virtual const boost::ptr_vector<Kernel> getTuningVector(
-            double* divs, size_t n) const = 0;
-
-    KernelGroup* clone() const;
-
-private:
-    virtual KernelGroup* do_clone() const = 0;
-};
-
-
-inline Kernel* new_clone(const Kernel &kernel) { return kernel.clone(); }
-inline KernelGroup* new_clone(const KernelGroup &grp) { return grp.clone(); }
+    if (n % 2 != 0) {
+        return vec[mid];
+    } else {
+        T next = *std::max_element(vec.begin(), vec.begin() + mid);
+        return (vec[mid] + next) / 2.0;
+    }
+}
 
 }
 #endif

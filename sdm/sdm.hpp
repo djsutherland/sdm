@@ -52,6 +52,7 @@ template <typename Scalar>
 class SDM {
     const svm_model &svm;
     const svm_problem &svm_prob; // needs to live at least as long as the model
+    const NPDivs::DivFunc &div_func;
     const Kernel &kernel;
     const NPDivs::DivParams &div_params;
     const size_t num_classes;
@@ -61,12 +62,14 @@ class SDM {
 
     public:
         SDM(const svm_model &svm, const svm_problem &svm_prob,
-            const Kernel &kernel, const NPDivs::DivParams &div_params,
+            const NPDivs::DivFunc &div_func, const Kernel &kernel,
+            const NPDivs::DivParams &div_params,
             size_t num_classes,
             const flann::Matrix<Scalar> *train_bags, size_t num_train)
         :
             svm(svm), svm_prob(svm_prob),
-            kernel(kernel), div_params(div_params), num_classes(num_classes),
+            kernel(kernel), div_func(div_func),
+            div_params(div_params), num_classes(num_classes),
             train_bags(train_bags), num_train(num_train)
         { }
 
@@ -92,10 +95,6 @@ namespace detail {
         1./512., 1./64., 1./8., 1, 1 << 3, 1 << 6, 1 << 9, 1 << 12, 1 << 15,
         1 << 18, 1 << 21, 1 << 24, 1 << 27, 1 << 30
     };
-
-    const double sigs[8] = { // 2^-4, 2^-2, ..., 2^10
-        1./16., 1./4., 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10
-    };
 }
 
 
@@ -117,7 +116,6 @@ const svm_parameter default_svm_params = {
     1     // probability
 };
 const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 14);
-const std::vector<double> default_sigma_mults(detail::sigs, detail::sigs + 8);
 
 // Function to train a new SDM. Note that the caller is responsible for deleting
 // the svm and svm_prob attributes.
@@ -125,15 +123,17 @@ const std::vector<double> default_sigma_mults(detail::sigs, detail::sigs + 8);
 // TODO: support multi-class classification
 // TODO: a mass-training method for more than one kernel
 // TODO: option to project based on test data too
+// TODO: more flexible tuning CV options>
 template <typename Scalar>
 SDM<Scalar> train_sdm(
     const flann::Matrix<Scalar> *train_bags, size_t num_train,
     const std::vector<int> &labels,
-    const Kernel &kernel,
+    const NPDivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
     const NPDivs::DivParams &div_params,
     const std::vector<double> &c_vals = default_c_vals,
-    const std::vector<double> &sigma_mults = default_sigma_mults,
-    const svm_parameter &svm_params = default_svm_params);
+    const svm_parameter &svm_params = default_svm_params,
+    size_t tuning_folds = 3);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
@@ -164,11 +164,12 @@ template <typename Scalar>
 SDM<Scalar> train_sdm(
         const flann::Matrix<Scalar> *train_bags, size_t num_train,
         const std::vector<int> &labels,
+        const NPDivs::DivFunc &div_func,
         const Kernel &kernel,
         const NPDivs::DivParams &div_params,
         const std::vector<double> &c_vals,
-        const std::vector<double> &sigma_mults,
-        const svm_parameter &svm_params)
+        const svm_parameter &svm_params,
+        size_t tuning_folds)
 {   // TODO - logging
 
     // copy the svm params so we can change them
@@ -188,10 +189,17 @@ SDM<Scalar> train_sdm(
     // first compute divergences
     flann::Matrix<double>* divs =
         NPDivs::alloc_matrix_array<double>(1, num_train, num_train);
-    np_divs(train_bags, num_train, kernel.getDivFunc(), divs,
-            div_params, false);
+    np_divs(train_bags, num_train, div_func, divs, div_params, false);
 
-    // TODO cross-validate over possibilities for the svm/kernel parameters
+
+    // // cross-validate over possibilities for the svm/kernel parameters
+    // for (std::vector<double>::const_iterator sig = sigma_mults.begin();
+    //         sig != sigma_mults.end(); ++sig)
+    // {
+    //     double sigma = *sig * avg_div;
+
+    // }
+
 
     // build up our best kernel matrix
     kernel.transformDivergences(divs->ptr(), num_train);
@@ -254,9 +262,9 @@ const {
 
     // compute divergences
     NPDivs::np_divs(train_bags, num_train, test_bags, num_test,
-            kernel.getDivFunc(), &forward, div_params);
+            div_func, &forward, div_params);
     NPDivs::np_divs(test_bags, num_test, train_bags, num_train,
-            kernel.getDivFunc(), &backward, div_params);
+            div_func, &backward, div_params);
 
     // pass through the kernel
     kernel.transformDivergences(forward.ptr(), num_train, num_test);

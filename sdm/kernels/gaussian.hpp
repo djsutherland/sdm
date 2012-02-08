@@ -46,9 +46,7 @@ protected:
     double sigma;
 
 public:
-    GaussianKernel(NPDivs::DivFunc &div_func, double sigma)
-        : super(div_func), sigma(sigma)
-        { }
+    GaussianKernel(double sigma) : sigma(sigma) {}
 
     virtual std::string name() const;
 
@@ -59,5 +57,35 @@ private:
     virtual GaussianKernel* do_clone() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+    const double sigs[8] = { 1./16., 1./4., 1, 1<<2, 1<<4, 1<<6, 1<<8, 1<<10 };
 }
+const std::vector<double> default_sigmas(detail::sigs, detail::sigs+8);
+
+
+class GaussianKernelGroup : KernelGroup {
+protected:
+    const std::vector<double> &sigmas;
+    bool scale_sigma;
+
+public:
+    typedef KernelType GaussianKernel;
+
+    GaussianKernelGroup(
+            const std::vector<double> &sigmas = default_sigmas,
+            bool scale_sigma = true)
+        :
+            sigmas(sigmas), scale_sigma(scale_sigma)
+    {}
+
+    const boost::ptr_vector<Kernel> getTuningVector(
+            double* divs, size_t n) const;
+
+private:
+    virtual GaussianKernelGroup* do_clone() const;
+};
+
+} // end namespace
 #endif

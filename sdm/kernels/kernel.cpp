@@ -42,8 +42,6 @@ using boost::format;
 
 namespace sdm {
 
-NPDivs::DivFunc& Kernel::getDivFunc() const { return div_func; }
-
 void Kernel::transformDivergences(double* div, size_t n) const {
     this->transformDivergences(div, n, n);
 }
@@ -56,5 +54,7 @@ const {
 }
 
 Kernel* Kernel::clone() const { return this->do_clone(); }
+
+KernelGroup* KernelGroup::clone() const { return this->do_clone(); }
 
 }

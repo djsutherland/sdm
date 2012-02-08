@@ -34,11 +34,15 @@
 #include <cmath>
 #include <string>
 #include <boost/format.hpp>
+#include <boost/ptr_container/ptr_vector.hpp>
+
+#include "sdm/utils.hpp"
+
 
 namespace sdm {
 
 std::string GaussianKernel::name() const {
-    return (boost::format("Gaussian(%s, %g)") % div_func.name() % sigma).str();
+    return (boost::format("Gaussian(%g)") % sigma).str();
 }
 
 double GaussianKernel::transformDivergence(double div) const {
@@ -47,7 +51,44 @@ double GaussianKernel::transformDivergence(double div) const {
 }
 
 GaussianKernel* GaussianKernel::do_clone() const {
-    return new GaussianKernel(div_func, sigma);
+    return new GaussianKernel(sigma);
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+typedef std::vector<double>::const_iterator double_iter;
+
+const boost::ptr_vector<Kernel> GaussianKernelGroup::getTuningVector(
+        double* divs, size_t n) const
+{
+    double scale;
+    if (scale_sigma) {
+        // find median of the nonzero divergences, for scaling sigma
+        std::vector<double> pos_divs;
+        pos_divs.reserve(n * (n - 1)); // diag is usually 0
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
+                double d = divs[i*n + j];
+                if (d > 0)
+                    pos_divs.push_back(d);
+            }
+        }
+        scale = median(pos_divs);
+    } else {
+        scale = 1.0;
+    }
+
+    boost::ptr_vector<Kernel> kerns;
+    kerns.reserve(sigmas.size());
+    for (double_iter i = sigmas.begin(); i != sigmas.end(); ++i) {
+        kerns.push_back(new GaussianKernel(*i * scale));
+    }
+    return kerns;
 }
+
+GaussianKernelGroup* GaussianKernelGroup::do_clone() const {
+    return new GaussianKernelGroup();
+}
+
+} // end namespace

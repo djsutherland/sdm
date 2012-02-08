@@ -32,18 +32,30 @@
 #include "sdm/kernels/linear.hpp"
 
 #include <string>
+#include <boost/ptr_container/ptr_vector.hpp>
 
 namespace sdm {
 
 double LinearKernel::transformDivergence(double div) const { return div; }
-void LinearKernel::transformDivergences(double* div, size_t m, size_t n) const{}
+void LinearKernel::transformDivergences(double* div, size_t m, size_t n)
+    const { }
 
-std::string LinearKernel::name() const {
-    return "Linear(" + div_func.name() + ")";
+std::string LinearKernel::name() const { return "Linear"; }
+
+LinearKernel* LinearKernel::do_clone() const { return new LinearKernel(); }
+
+
+
+const boost::ptr_vector<Kernel> LinearKernelGroup::getTuningVector(
+        double* divs, size_t n)
+const {
+    boost::ptr_vector<Kernel> kerns;
+    kerns.push_back(new LinearKernel());
+    return kerns;
 }
 
-LinearKernel* LinearKernel::do_clone() const {
-    return new LinearKernel(div_func);
+LinearKernelGroup* LinearKernelGroup::do_clone() const {
+    return new LinearKernelGroup();
 }
 
-}
+} // end namespace
