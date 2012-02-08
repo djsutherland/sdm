@@ -85,7 +85,7 @@ class SDM {
 
 };
 
-// Function to train a new SDM. Note that YOU are responsible for deleting
+// Function to train a new SDM. Note that the caller is responsible for deleting
 // the svm and svm_prob attributes.
 //
 // TODO: support multi-class classification
@@ -164,6 +164,7 @@ SDM<Scalar> train_sdm(
     // train an SVM on the whole thing
     // TODO after doing CV, won't need to alloc here
     detail::store_kernel_matrix(*prob, divs->ptr(), true);
+    NPDivs::free_matrix_array(divs, 1);
 
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
