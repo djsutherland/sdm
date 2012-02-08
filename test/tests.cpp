@@ -103,27 +103,16 @@ TEST(SDMTest, BasicTrainingTesting) {
     NPDivs::DivParams div_params;
     div_params.num_threads = 1;
 
-    // TODO: write a convenince function to set up svm_params, or something
-    svm_parameter svm_params;
-    svm_params.svm_type = C_SVC;
-    svm_params.kernel_type = PRECOMPUTED;
-    svm_params.gamma = 0; // not used
-    svm_params.degree = 0; // not used
-    svm_params.coef0 = 0; // not used
-    svm_params.cache_size = 100; // in MB
-    svm_params.C = .00195312;
-    svm_params.eps = 1e-3;
-    svm_params.nu = .5; // not used
-    svm_params.p = 0.1; // not used
-    svm_params.nr_weight = 0;
-    svm_params.weight_label = NULL;
-    svm_params.weight = NULL;
-    svm_params.shrinking = 1;
+    // train a model
+    svm_parameter svm_params = default_svm_params;
+    svm_params.C = 1./512.;
     svm_params.probability = 0;
 
-    // train a model
+    std::vector<double> cs(1, 1./512.);
+    std::vector<double> sigs(1, 1./16.);
+
     const SDM<double> &model =
-        train_sdm(train, 10, labels, kernel, div_params, svm_params);
+        train_sdm(train, 10, labels, kernel, div_params, cs, sigs, svm_params);
 
     // an N(0, 1) bag
     double test1[10] = {-1.3499, 3.0349, 0.7254,-0.0631, 0.7147,-0.2050,-0.1241, 1.4897, 1.4090, 1.4172};

@@ -85,6 +85,40 @@ class SDM {
 
 };
 
+// set up default values for training
+
+namespace detail {
+    const double cvals[14] = { // 2^-9, 2^-6, ..., 2^30
+        1./512., 1./64., 1./8., 1, 1 << 3, 1 << 6, 1 << 9, 1 << 12, 1 << 15,
+        1 << 18, 1 << 21, 1 << 24, 1 << 27, 1 << 30
+    };
+
+    const double sigs[8] = { // 2^-4, 2^-2, ..., 2^10
+        1./16., 1./4., 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10
+    };
+}
+
+
+const svm_parameter default_svm_params = {
+    C_SVC, // svm_type
+    PRECOMPUTED, // kernel_type
+    0,    // degree - not used
+    0,    // gamma - not used
+    0,    // coef0 - not used
+    100,  // cache_size, in MB
+    1e-3, // eps
+    1,    // C
+    0,    // nr_weight
+    NULL, // weight_label
+    NULL, // weight
+    0,    // nu - not used
+    0,    // p - not used
+    1,    // shrinking
+    1     // probability
+};
+const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 14);
+const std::vector<double> default_sigma_mults(detail::sigs, detail::sigs + 8);
+
 // Function to train a new SDM. Note that the caller is responsible for deleting
 // the svm and svm_prob attributes.
 //
@@ -97,9 +131,9 @@ SDM<Scalar> train_sdm(
     const std::vector<int> &labels,
     const Kernel &kernel,
     const NPDivs::DivParams &div_params,
-    const svm_parameter &svm_params
-    // TODO: cross-validation options
-);
+    const std::vector<double> &c_vals = default_c_vals,
+    const std::vector<double> &sigma_mults = default_sigma_mults,
+    const svm_parameter &svm_params = default_svm_params);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
@@ -132,6 +166,8 @@ SDM<Scalar> train_sdm(
         const std::vector<int> &labels,
         const Kernel &kernel,
         const NPDivs::DivParams &div_params,
+        const std::vector<double> &c_vals,
+        const std::vector<double> &sigma_mults,
         const svm_parameter &svm_params)
 {   // TODO - logging
 
