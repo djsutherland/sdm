@@ -37,4 +37,24 @@ namespace sdm {
 template class SDM<float>;
 template class SDM<double>;
 
+template SDM<float> * train_sdm(
+    const flann::Matrix<float> *train_bags, size_t num_train,
+    const std::vector<int> &labels,
+    const NPDivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const NPDivs::DivParams &div_params,
+    const std::vector<double> &c_vals,
+    const svm_parameter &svm_params,
+    size_t tuning_folds);
+
+template SDM<double> * train_sdm(
+    const flann::Matrix<double> *train_bags, size_t num_train,
+    const std::vector<int> &labels,
+    const NPDivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const NPDivs::DivParams &div_params,
+    const std::vector<double> &c_vals,
+    const svm_parameter &svm_params,
+    size_t tuning_folds);
+
 } // end namespace

@@ -52,9 +52,9 @@ template <typename Scalar>
 class SDM {
     const svm_model &svm;
     const svm_problem &svm_prob; // needs to live at least as long as the model
-    const NPDivs::DivFunc &div_func;
-    const Kernel &kernel;
-    const NPDivs::DivParams &div_params;
+    const NPDivs::DivFunc *div_func;
+    const Kernel *kernel;
+    const NPDivs::DivParams div_params;
     const size_t num_classes;
 
     const flann::Matrix<Scalar> *train_bags;
@@ -68,10 +68,17 @@ class SDM {
             const flann::Matrix<Scalar> *train_bags, size_t num_train)
         :
             svm(svm), svm_prob(svm_prob),
-            kernel(kernel), div_func(div_func),
+            kernel(new_clone(kernel)), div_func(new_clone(div_func)),
             div_params(div_params), num_classes(num_classes),
             train_bags(train_bags), num_train(num_train)
         { }
+
+        ~SDM() {
+            delete div_func;
+            delete kernel;
+        }
+
+        void destroyModelAndProb();
 
         int predict(const flann::Matrix<Scalar> &test_bag) const;
         int predict(const flann::Matrix<Scalar> &test_bag,
@@ -125,7 +132,7 @@ const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 14);
 // TODO: option to project based on test data too
 // TODO: more flexible tuning CV options>
 template <typename Scalar>
-SDM<Scalar> train_sdm(
+SDM<Scalar> * train_sdm(
     const flann::Matrix<Scalar> *train_bags, size_t num_train,
     const std::vector<int> &labels,
     const NPDivs::DivFunc &div_func,
@@ -157,15 +164,29 @@ namespace detail {
     void print_null(const char *s) {}
 }
 
+template <typename Scalar>
+void SDM<Scalar>::destroyModelAndProb() {
+    // FIXME: rework SDM memory model to avoid gross const_casts
+
+    svm_free_model_content(const_cast<svm_model*> (&svm));
+    delete const_cast<svm_model*>(&svm);
+
+    for (size_t i = 0; i < svm_prob.l; i++)
+        delete[] svm_prob.x[i];
+    delete[] svm_prob.x;
+    delete[] svm_prob.y;
+    delete const_cast<svm_problem*>(&svm_prob);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Training
 
 template <typename Scalar>
-SDM<Scalar> train_sdm(
+SDM<Scalar> * train_sdm(
         const flann::Matrix<Scalar> *train_bags, size_t num_train,
         const std::vector<int> &labels,
         const NPDivs::DivFunc &div_func,
-        const Kernel &kernel,
+        const KernelGroup &kernel_group,
         const NPDivs::DivParams &div_params,
         const std::vector<double> &c_vals,
         const svm_parameter &svm_params,
@@ -200,6 +221,9 @@ SDM<Scalar> train_sdm(
 
     // }
 
+    const boost::ptr_vector<Kernel> &kernels =
+        kernel_group.getTuningVector(divs->ptr(), num_train);
+    const Kernel &kernel = kernels[0];
 
     // build up our best kernel matrix
     kernel.transformDivergences(divs->ptr(), num_train);
@@ -208,6 +232,8 @@ SDM<Scalar> train_sdm(
     // train an SVM on the whole thing
     // TODO after doing CV, won't need to alloc here
     detail::store_kernel_matrix(*prob, divs->ptr(), true);
+
+    // temp values no longer needed
     NPDivs::free_matrix_array(divs, 1);
 
     const char* error = svm_check_parameter(prob, &svm_p);
@@ -216,8 +242,7 @@ SDM<Scalar> train_sdm(
         throw std::domain_error(error);
     }
     svm_model *svm = svm_train(prob, &svm_p);
-
-    return SDM<Scalar>(*svm, *prob, kernel, div_params,
+    return new SDM<Scalar>(*svm, *prob, div_func, kernel, div_params,
             svm_get_nr_class(svm), train_bags, num_train);
 }
 
@@ -262,13 +287,13 @@ const {
 
     // compute divergences
     NPDivs::np_divs(train_bags, num_train, test_bags, num_test,
-            div_func, &forward, div_params);
+            *div_func, &forward, div_params);
     NPDivs::np_divs(test_bags, num_test, train_bags, num_train,
-            div_func, &backward, div_params);
+            *div_func, &backward, div_params);
 
     // pass through the kernel
-    kernel.transformDivergences(forward.ptr(), num_train, num_test);
-    kernel.transformDivergences(backward.ptr(), num_test, num_train);
+    kernel->transformDivergences(forward.ptr(), num_train, num_test);
+    kernel->transformDivergences(backward.ptr(), num_test, num_train);
 
     // we can't project here, so we just symmetrize
     // TODO - symmetrize divergence estimates or kernel estimates?
@@ -284,7 +309,7 @@ const {
         ? &svm_predict_probability : &svm_predict_values;
 
     // we'll reuse this svm_node array for testing
-    svm_node *kernel_row = new svm_node[num_train+2];
+    svm_node kernel_row[num_train+2];
     for (size_t i = 0; i <= num_train; i++)
         kernel_row[i].index = i;
     kernel_row[num_train+1].index = -1;

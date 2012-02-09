@@ -65,13 +65,13 @@ namespace detail {
 const std::vector<double> default_sigmas(detail::sigs, detail::sigs+8);
 
 
-class GaussianKernelGroup : KernelGroup {
+class GaussianKernelGroup : public KernelGroup {
 protected:
     const std::vector<double> &sigmas;
     bool scale_sigma;
 
 public:
-    typedef KernelType GaussianKernel;
+    typedef GaussianKernel KernelType;
 
     GaussianKernelGroup(
             const std::vector<double> &sigmas = default_sigmas,

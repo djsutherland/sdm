@@ -41,9 +41,7 @@ class LinearKernel : public Kernel {
     typedef Kernel super;
 
 public:
-    LinearKernel() {}
-
-    virtual boost::ptr_vector<Kernel> getTuningVector(double* divs, size_t n);
+    LinearKernel() : super() {}
 
     virtual std::string name() const;
 
@@ -54,9 +52,9 @@ private:
     virtual LinearKernel* do_clone() const;
 };
 
-class LinearKernelGroup : KernelGroup {
+class LinearKernelGroup : public KernelGroup {
 public:
-    typedef KernelType LinearKernel;
+    typedef LinearKernel KernelType;
 
     LinearKernelGroup() {}
 

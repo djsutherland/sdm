@@ -98,7 +98,9 @@ TEST(SDMTest, BasicTrainingTesting) {
 
     // set up parameters
     NPDivs::DivL2 div_func;
-    GaussianKernel kernel(div_func, .00671082);
+
+    std::vector<double> sigs(1, .00671082);
+    GaussianKernelGroup kernel_group(sigs, false);
 
     NPDivs::DivParams div_params;
     div_params.num_threads = 1;
@@ -109,10 +111,10 @@ TEST(SDMTest, BasicTrainingTesting) {
     svm_params.probability = 0;
 
     std::vector<double> cs(1, 1./512.);
-    std::vector<double> sigs(1, 1./16.);
 
-    const SDM<double> &model =
-        train_sdm(train, 10, labels, kernel, div_params, cs, sigs, svm_params);
+    SDM<double> *model =
+        train_sdm(train, 10, labels, div_func, kernel_group, div_params,
+                cs, svm_params);
 
     // an N(0, 1) bag
     double test1[10] = {-1.3499, 3.0349, 0.7254,-0.0631, 0.7147,-0.2050,-0.1241, 1.4897, 1.4090, 1.4172};
@@ -126,7 +128,7 @@ TEST(SDMTest, BasicTrainingTesting) {
     };
     vector< vector<double> > vals(2);
 
-    vector<int> pred_lab = model.predict(test, 2, vals);
+    vector<int> pred_lab = model->predict(test, 2, vals);
 
     EXPECT_EQ(0, pred_lab[0]);
     EXPECT_NEAR(.0022, vals[0][0], .0005);
@@ -136,6 +138,8 @@ TEST(SDMTest, BasicTrainingTesting) {
     EXPECT_NEAR(-.0056, vals[1][0], .0005);
     // cout << "Vals[1]: " << vals[1][0] << " " << vals[1][1] << endl;
 
+    model->destroyModelAndProb();
+    delete model;
 }
 
 } // end namespace

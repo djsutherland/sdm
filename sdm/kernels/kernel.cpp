@@ -36,10 +36,6 @@
 
 #include "sdm/kernels/kernel.hpp"
 
-using std::exp;
-using std::string;
-using boost::format;
-
 namespace sdm {
 
 void Kernel::transformDivergences(double* div, size_t n) const {
