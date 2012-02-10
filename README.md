@@ -24,7 +24,7 @@ Installation
     mkdir build; cd build
     cmake ..
     make
-    make runtests # optional, requires HDF5
+    make runtests # optional
     make install
 
 This will install the shared library named e.g. `libsdm.so` (depending on

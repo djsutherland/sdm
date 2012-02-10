@@ -94,8 +94,6 @@ class SDM {
                 const flann::Matrix<Scalar> *test_bags, size_t num_test,
                 std::vector< std::vector<double> > &vals)
             const;
-
-
 };
 
 // set up default values for training
@@ -130,8 +128,8 @@ const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 11);
 // the svm and svm_prob attributes.
 //
 // TODO: a mass-training method for more than one kernel
-// TODO: option to project based on test data too
-// TODO: more flexible tuning CV options>
+// TODO: option to do the projection on test data as well
+// TODO: more flexible tuning CV options...tune on a subset of the data?
 template <typename Scalar>
 SDM<Scalar> * train_sdm(
     const flann::Matrix<Scalar> *train_bags, size_t num_train,
@@ -272,9 +270,6 @@ SDM<Scalar> * train_sdm(
 
     // want to keep track of the best kernel/C combos...keep all of them, to
     // avoid biasing towards ones we see earlier when accuracies are equal.
-    //
-    // TODO: smarter CV approach that avoids the expensive high-C ones if it
-    //       seems like they won't do well?
     typedef std::pair<size_t, size_t> config; // <kernel, C> indices
     std::vector<config> best_configs;
     size_t best_correct = 0;
@@ -404,8 +399,6 @@ const {
         for (size_t j = 0; j < num_train; j++)
             backward[i][j] = (forward[j][i] + backward[i][j]) / 2.0;
 
-    const flann::Matrix<double> &divs = backward;
-
     // figure out which prediction function we want to use
     double (*pred_fn)(const svm_model*, const svm_node*, double*) =
         svm_check_probability_model(&svm)
@@ -427,7 +420,7 @@ const {
         // fill in our kernel evaluations
         kernel_row[0].value = -i - 1;
         for (size_t j = 0; j < num_train; j++)
-            kernel_row[j+1].value = divs[i][j];
+            kernel_row[j+1].value = backward[i][j];
 
         // get space to store our decision/probability values
         vals[i].resize(num_classes);
