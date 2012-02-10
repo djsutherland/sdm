@@ -130,7 +130,6 @@ const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 14);
 // Function to train a new SDM. Note that the caller is responsible for deleting
 // the svm and svm_prob attributes.
 //
-// TODO: support multi-class classification
 // TODO: a mass-training method for more than one kernel
 // TODO: option to project based on test data too
 // TODO: more flexible tuning CV options>
