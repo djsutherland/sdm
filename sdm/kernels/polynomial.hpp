@@ -28,63 +28,69 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#ifndef SDM_KERNEL_GAUSSIAN_HPP_
-#define SDM_KERNEL_GAUSSIAN_HPP_
+#ifndef SDM_KERNELS_POLYNOMIAL_HPP_
+#define SDM_KERNELS_POLYNOMIAL_HPP_
 #include "sdm/basics.hpp"
 #include "sdm/kernels/kernel.hpp"
 
-#include <cmath>
-#include <string>
-#include <boost/format.hpp>
+#include <vector>
+
+#include <boost/ptr_container/ptr_vector.hpp>
 
 namespace sdm {
 
-class GaussianKernel : public Kernel {
+class PolynomialKernel : public Kernel {
     typedef Kernel super;
 
 protected:
-    double sigma;
+    size_t degree;
+    double coef0;
 
 public:
-    GaussianKernel(double sigma) : sigma(sigma) {}
+    PolynomialKernel(size_t degree, double coef0 = 1)
+        : super(), degree(degree), coef0(coef0)
+    {}
 
     virtual std::string name() const;
 
     virtual double transformDivergence(double div) const;
-    // TODO implement vectorized gaussian kernel
+
+    size_t getDegree() const;
+    double getCoef0() const;
 
 private:
-    virtual GaussianKernel* do_clone() const;
+    virtual PolynomialKernel* do_clone() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
-    const double sigs[8] = { 1./16., 1./4., 1, 1<<2, 1<<4, 1<<6, 1<<8, 1<<10 };
+    const size_t degs[7] = { 1, 2, 3, 4, 5, 7, 9 };
+    const double coef0s[2] = { 1, 0 };
 }
-const std::vector<double> default_sigmas(detail::sigs, detail::sigs + 8);
+const std::vector<size_t> default_degrees(detail::degs, detail::degs + 7);
+const std::vector<double> default_coef0s(detail::coef0s, detail::coef0s + 2);
 
 
-class GaussianKernelGroup : public KernelGroup {
+class PolynomialKernelGroup : public KernelGroup {
 protected:
-    const std::vector<double> &sigmas;
-    bool scale_sigma;
+    const std::vector<size_t> degrees;
+    const std::vector<double> coef0s;
 
 public:
-    typedef GaussianKernel KernelType;
+    typedef PolynomialKernel KernelType;
 
-    GaussianKernelGroup(
-            const std::vector<double> &sigmas = default_sigmas,
-            bool scale_sigma = true)
-        :
-            sigmas(sigmas), scale_sigma(scale_sigma)
-    {}
+    PolynomialKernelGroup(
+            const std::vector<size_t> &degrees = default_degrees,
+            const std::vector<double> &coef0s = default_coef0s)
+        : degrees(degrees), coef0s(coef0s)
+    {} 
 
-    const boost::ptr_vector<Kernel> getTuningVector(
+    virtual const boost::ptr_vector<Kernel> getTuningVector(
             double* divs, size_t n) const;
 
 private:
-    virtual GaussianKernelGroup* do_clone() const;
+    virtual PolynomialKernelGroup* do_clone() const;
 };
 
 } // end namespace

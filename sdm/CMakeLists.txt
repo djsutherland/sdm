@@ -3,6 +3,7 @@ add_library(sdm SHARED
     kernel_projection.cpp
     kernels/kernel.cpp
     kernels/linear.cpp
+    kernels/polynomial.cpp
     kernels/gaussian.cpp
 )
 target_link_libraries(sdm
