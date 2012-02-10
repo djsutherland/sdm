@@ -48,10 +48,6 @@
 #include <flann/util/matrix.h>
 #include <svm.h>
 
-#include <iostream>
-using std::cout;
-using std::endl;
-
 namespace sdm {
 
 // TODO memory ownership with this is all screwy...make it clearer
@@ -267,17 +263,17 @@ SDM<Scalar> * train_sdm(
         best_configs.push_back(config(0, c_vals[0]));
     } else {
         // make a copy of divergences so we can mangle it
-        double *divscopy = new double[num_train*num_train];
-        std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, divscopy);
+        double *km = new double[num_train*num_train];
 
         // used to store labels into during CV
         double cv_labels[num_train];
 
         for (size_t k = 0; k < kernels.size(); k++) {
             // turn into a kernel matrix and store in the svm_problem
-            kernels[k].transformDivergences(divscopy, num_train);
-            project_to_symmetric_psd(divscopy, num_train);
-            detail::store_kernel_matrix(*prob, divscopy, false);
+            std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, km);
+            kernels[k].transformDivergences(km, num_train);
+            project_to_symmetric_psd(km, num_train);
+            detail::store_kernel_matrix(*prob, km, false);
 
             for (size_t ci = 0; ci < c_vals.size(); ci++) {
                 // do SVM cross-validation with these params
@@ -289,7 +285,7 @@ SDM<Scalar> * train_sdm(
                     if (cv_labels[i] == labels[i])
                         num_correct++;
 
-                cout << "k: " << k << " ci: " << ci << " correct: " << num_correct << endl;
+                //cout << "k: " << k << " ci: " << ci << " correct: " << num_correct << endl;
                 if (num_correct >= best_correct) {
                     if (num_correct > best_correct) {
                         best_configs.clear();
@@ -300,7 +296,7 @@ SDM<Scalar> * train_sdm(
             }
         }
 
-        delete[] divscopy;
+        delete[] km;
     }
 
     // choose a kernel / C combo as the best one
