@@ -6,12 +6,14 @@
 #include <stdexcept>
 
 #include <np-divs/div-funcs/div_l2.hpp>
+#include <np-divs/div-funcs/div_linear.hpp>
 #include <np-divs/div-funcs/div_renyi.hpp>
 #include <np-divs/div_params.hpp>
 
 #include "sdm/kernel_projection.hpp"
 #include "sdm/kernels/gaussian.hpp"
 #include "sdm/kernels/linear.hpp"
+#include "sdm/kernels/polynomial.hpp"
 #include "sdm/sdm.hpp"
 
 #include <svm.h>
@@ -66,7 +68,7 @@ TEST(UtilitiesTest, CovarianceProjection) {
 #define NUM_TRAIN 10
 #define TRAIN_SIZE 10
 #define NUM_TEST 4
-class SmallSDMTest : public ::testing::Test {
+class EasySmallSDMTest : public ::testing::Test {
     protected:
 
     typedef flann::Matrix<double> Matrix;
@@ -84,7 +86,7 @@ class SmallSDMTest : public ::testing::Test {
     NPDivs::DivParams div_params;
     svm_parameter svm_params;
 
-    SmallSDMTest() :
+    EasySmallSDMTest() :
         num_train(NUM_TRAIN),
         num_test(NUM_TEST),
         div_params(),
@@ -98,12 +100,12 @@ class SmallSDMTest : public ::testing::Test {
             {-0.8637, 0.0774,-1.2141,-1.1135,-0.0068, 1.5326,-0.7697, 0.3714,-0.2256, 1.1174},
             {-1.0891, 0.0326, 0.5525, 1.1006, 1.5442, 0.0859,-1.4916,-0.7423,-1.0616, 2.3505},
 
-            // 10 samples from N(.5, .5)
-            { 1.2097, 0.6458, 0.5989, 1.2938, 0.0978, 0.8483, 0.9175, 0.3781, 0.6078,-0.0829},
-            {-0.0740, 0.5524, 0.8611, 1.7927, 0.1666, 0.5937, 0.4588,-0.4665, 0.2805,-0.3973},
-            { 0.9202, 0.0560, 0.5500, 0.2277, 0.6518, 0.1998, 0.7450, 0.8697, 1.3559, 0.4029},
-            {-0.5692, 0.0802, 1.1773,-0.0361, 0.9805, 0.5620, 1.2183,-0.4804, 0.4012,-0.1039},
-            { 1.9540, 0.9126, 1.1895,-0.0291, 0.2657, 0.3638, 1.0492, 0.3611, 0.8508,-0.5259}
+            // 10 samples from N(2, .5)
+            { 2.3719, 1.7295, 2.1884, 1.6470, 2.4262, 1.0994, 1.4593, 1.6393, 1.9404, 1.2268},
+            { 2.0136, 2.3392, 2.2173, 2.3234, 1.3115, 2.6987, 0.6268, 2.1646, 1.9145, 1.9381},
+            { 1.7944, 1.5712, 1.8728, 0.9059, 2.2390, 1.6922, 2.1441, 1.7649, 2.9298, 2.8285},
+            { 1.7341, 1.7434, 1.5150, 2.6200, 1.7308, 2.0120, 2.1880, 1.5013, 1.5420, 1.4232},
+            { 1.6267, 1.6023, 3.1278, 2.2319, 2.2343, 2.1287, 2.4394, 2.4871, 2.3871, 2.6310}
         };
 
         for (size_t i = 0; i < NUM_TRAIN; i++) {
@@ -137,22 +139,22 @@ class SmallSDMTest : public ::testing::Test {
         test_labels[i] = 0;
         i++;
 
-        // 10 from N(.5, .5)
-        double test21[10] = { 0.3975, 0.4379, 1.2448, 1.2045, 1.2086, 0.8357,-0.1037, 0.8586, 1.3151, 0.7444};
+        // 10 from N(2, .5)
+        double test21[10] = { 1.6125, 2.4121, 2.7705, 2.0103, 1.0000, 2.5473, 1.7158, 2.6855, 2.0631, 1.8725};
         test_raw[i] = new double[10]; std::copy(test21, test21+10, test_raw[i]);
         test[i] = Matrix(test_raw[i], 5, 1);
         test_labels[i] = 1;
         i++;
 
-        // 5 from N(.5, .5)
-        double test22[5] = { 0.8357,-0.1037, 0.8586, 1.3151, 0.7444};
+        // 5 from N(2, .5)
+        double test22[5] = { 1.9902, 3.1628, 2.3821, 1.8842, 0.7164};
         test_raw[i] = new double[5]; std::copy(test22, test22+5, test_raw[i]);
         test[i] = Matrix(test_raw[i], 5, 1);
         test_labels[i] = 1;
         i++;
     }
 
-    ~SmallSDMTest() {
+    ~EasySmallSDMTest() {
         for (size_t i = 0; i < NUM_TEST; i++)
             delete[] test_raw[i];
         delete[] test_raw;
@@ -187,8 +189,8 @@ class SmallSDMTest : public ::testing::Test {
 
 };
 
-TEST_F(SmallSDMTest, BasicTrainingTesting) {
-    NPDivs::DivRenyi div_func(.9);
+TEST_F(EasySmallSDMTest, BasicTrainingTesting) {
+    NPDivs::DivL2 div_func;
 
     std::vector<double> sigs(1, .00671082);
     GaussianKernelGroup kernel_group(sigs, false);
@@ -200,15 +202,22 @@ TEST_F(SmallSDMTest, BasicTrainingTesting) {
 
     const vector< vector<double> > &vals =
         testTrainTest(div_func, kernel_group, cs);
-
-    EXPECT_NEAR(.0022, vals[0][0], .0005);
-    EXPECT_NEAR(-.0056, vals[3][0], .0005);
 }
 
-TEST_F(SmallSDMTest, CVTrainingTesting) {
-    NPDivs::DivL2 div_func;
+TEST_F(EasySmallSDMTest, RenyiCVTrainingTesting) {
+    NPDivs::DivRenyi div_func(.99);
     GaussianKernelGroup kernel_group;
-    // LinearKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    const vector< vector<double> > &vals =
+        testTrainTest(div_func, kernel_group);
+}
+
+TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
+    NPDivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
 
     svm_params.probability = 0;
     div_params.k = 2;
