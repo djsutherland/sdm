@@ -36,14 +36,21 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <np-divs/matrix_arrays.hpp>
 #include <np-divs/np_divs.hpp>
 #include <flann/util/matrix.h>
 #include <svm.h>
+
+#include <iostream>
+using std::cout;
+using std::endl;
 
 namespace sdm {
 
@@ -155,13 +162,27 @@ namespace detail {
             prob.x[i][0].value = i+1;
             for (size_t j = 0; j < n; j++) {
                 prob.x[i][j+1].index = j+1;
-                prob.x[i][j+1].value = divs[i + j*n];
+                prob.x[i][j+1].value = divs[i*n + j];
             }
             prob.x[i][n+1].index = -1;
         }
     }
 
     void print_null(const char *s) {}
+
+    template <typename T>
+    T pick_rand(std::vector<T> vec) {
+        size_t n = vec.size();
+        if (n == 0) {
+            throw std::domain_error("picking from empty vector");
+        } else if (n == 1) {
+            return vec[0];
+        } else {
+            // use c++'s silly random number generator; good enough for this
+            std::srand(std::time(NULL));
+            return vec[std::rand() % n];
+        }
+    }
 }
 
 template <typename Scalar>
@@ -193,6 +214,12 @@ SDM<Scalar> * train_sdm(
         size_t tuning_folds)
 {   // TODO - logging
 
+    if (c_vals.size() == 0) {
+        throw std::domain_error("c_vals is empty");
+    } else if (labels.size() != num_train) {
+        throw std::domain_error("labels.size() disagrees with num_train");
+    }
+
     // copy the svm params so we can change them
     svm_parameter svm_p = svm_params;
     svm_p.svm_type = C_SVC;
@@ -201,40 +228,93 @@ SDM<Scalar> * train_sdm(
     // make libSVM shut up  -  TODO real logging
     svm_set_print_string_function(&detail::print_null);
 
-    // set up the basic svm_problem, except for the kernel values
-    svm_problem *prob = new svm_problem;
-    prob->l = num_train;
-    prob->y = new double[num_train];
-    std::copy(labels.begin(), labels.end(), prob->y);
-
     // first compute divergences
     flann::Matrix<double>* divs =
         NPDivs::alloc_matrix_array<double>(1, num_train, num_train);
     np_divs(train_bags, num_train, div_func, divs, div_params, false);
 
+    // set up the basic svm_problem
+    svm_problem *prob = new svm_problem;
+    prob->l = num_train;
+    prob->y = new double[num_train];
+    for (size_t i = 0; i < num_train; i++)
+        prob->y[i] = labels[i];
 
-    // // cross-validate over possibilities for the svm/kernel parameters
-    // for (std::vector<double>::const_iterator sig = sigma_mults.begin();
-    //         sig != sigma_mults.end(); ++sig)
-    // {
-    //     double sigma = *sig * avg_div;
+    // store un-transformed divs in the problem just so it's all allocated
+    detail::store_kernel_matrix(*prob, divs[0].ptr(), true);
 
-    // }
+    ////////////////////////////////////////////////////////////////////////////
+    // tuning: cross-validate over possible svm/kernel parameters
+    // TODO: optionally parallelize tuning
 
+    // ask the kernel group for the kernels we'll pick from for tuning
     const boost::ptr_vector<Kernel> &kernels =
         kernel_group.getTuningVector(divs->ptr(), num_train);
-    const Kernel &kernel = kernels[0];
 
-    // build up our best kernel matrix
-    kernel.transformDivergences(divs->ptr(), num_train);
-    project_to_symmetric_psd(divs->ptr(), num_train);
 
-    // train an SVM on the whole thing
-    // TODO after doing CV, won't need to alloc here
-    detail::store_kernel_matrix(*prob, divs->ptr(), true);
+    // want to keep track of the best kernel/C combos...keep all of them, to
+    // avoid biasing towards ones we see earlier when accuracies are equal.
+    //
+    // TODO: smarter CV approach that avoids the expensive high-C ones if it
+    //       seems like they won't do well?
+    typedef std::pair<size_t, size_t> config; // <kernel, C> indices
+    std::vector<config> best_configs;
+    size_t best_correct = 0;
 
-    // temp values no longer needed
-    NPDivs::free_matrix_array(divs, 1);
+    if (kernels.size() == 0) {
+        throw std::domain_error("no kernels in the kernel group");
+    } else if (kernels.size() == 1 && c_vals.size() == 1) {
+        best_configs.push_back(config(0, c_vals[0]));
+    } else {
+        // make a copy of divergences so we can mangle it
+        double *divscopy = new double[num_train*num_train];
+        std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, divscopy);
+
+        // used to store labels into during CV
+        double cv_labels[num_train];
+
+        for (size_t k = 0; k < kernels.size(); k++) {
+            // turn into a kernel matrix and store in the svm_problem
+            kernels[k].transformDivergences(divscopy, num_train);
+            project_to_symmetric_psd(divscopy, num_train);
+            detail::store_kernel_matrix(*prob, divscopy, false);
+
+            for (size_t ci = 0; ci < c_vals.size(); ci++) {
+                // do SVM cross-validation with these params
+                svm_p.C = c_vals[ci];
+                svm_cross_validation(prob, &svm_p, tuning_folds, cv_labels);
+
+                size_t num_correct = 0;
+                for (size_t i = 0; i < num_train; i++)
+                    if (cv_labels[i] == labels[i])
+                        num_correct++;
+
+                cout << "k: " << k << " ci: " << ci << " correct: " << num_correct << endl;
+                if (num_correct >= best_correct) {
+                    if (num_correct > best_correct) {
+                        best_configs.clear();
+                        best_correct = num_correct;
+                    }
+                    best_configs.push_back(std::make_pair(k, ci));
+                }
+            }
+        }
+
+        delete[] divscopy;
+    }
+
+    // choose a kernel / C combo as the best one
+    const config &best_config = detail::pick_rand(best_configs);
+    const Kernel &kernel = kernels[best_config.first];
+    svm_p.C = c_vals[best_config.second];
+
+    ////////////////////////////////////////////////////////////////////////////
+    // train final SVM on the whole thing
+
+    kernel.transformDivergences(divs[0].ptr(), num_train);
+    project_to_symmetric_psd(divs[0].ptr(), num_train);
+    detail::store_kernel_matrix(*prob, divs[0].ptr(), false);
+    NPDivs::free_matrix_array(divs, 1); // don't need these anymore
 
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
@@ -319,6 +399,7 @@ const {
     std::vector<int> pred_labels(num_test);
 
     // predict!
+    vals.resize(num_test);
     for (size_t i = 0; i < num_test; i++) {
         // fill in our kernel evaluations
         kernel_row[0].value = -i - 1;

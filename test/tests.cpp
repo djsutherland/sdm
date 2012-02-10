@@ -6,10 +6,12 @@
 #include <stdexcept>
 
 #include <np-divs/div-funcs/div_l2.hpp>
+#include <np-divs/div-funcs/div_renyi.hpp>
 #include <np-divs/div_params.hpp>
 
 #include "sdm/kernel_projection.hpp"
 #include "sdm/kernels/gaussian.hpp"
+#include "sdm/kernels/linear.hpp"
 #include "sdm/sdm.hpp"
 
 #include <svm.h>
@@ -63,7 +65,7 @@ TEST(UtilitiesTest, CovarianceProjection) {
 
 #define NUM_TRAIN 10
 #define TRAIN_SIZE 10
-#define NUM_TEST 2
+#define NUM_TEST 4
 class SmallSDMTest : public ::testing::Test {
     protected:
 
@@ -119,18 +121,35 @@ class SmallSDMTest : public ::testing::Test {
         test_labels.resize(NUM_TEST);
 
         test_raw = new double*[NUM_TEST];
+        size_t i = 0;
 
         // 10 from N(0, 1)
-        double test1[10] = {-1.3499, 3.0349, 0.7254,-0.0631, 0.7147,-0.2050,-0.1241, 1.4897, 1.4090, 1.4172};
-        test_raw[0] = new double[10]; std::copy(test1, test1+10, test_raw[0]);
-        test[0] = Matrix(test_raw[0], 10, 1);
-        test_labels[0] = 0;
+        double test11[10] = {-1.3499, 3.0349, 0.7254,-0.0631, 0.7147,-0.2050,-0.1241, 1.4897, 1.4090, 1.4172};
+        test_raw[i] = new double[10]; std::copy(test11, test11+10, test_raw[i]);
+        test[i] = Matrix(test_raw[i], 10, 1);
+        test_labels[i] = 0;
+        i++;
+
+        // 5 from N(0, 1)
+        double test12[5] = {-0.5377, 1.8339,-2.2588, 0.8622, 0.3188};
+        test_raw[i] = new double[5]; std::copy(test12, test12+5, test_raw[i]);
+        test[i] = Matrix(test_raw[i], 5, 1);
+        test_labels[i] = 0;
+        i++;
+
+        // 10 from N(.5, .5)
+        double test21[10] = { 0.3975, 0.4379, 1.2448, 1.2045, 1.2086, 0.8357,-0.1037, 0.8586, 1.3151, 0.7444};
+        test_raw[i] = new double[10]; std::copy(test21, test21+10, test_raw[i]);
+        test[i] = Matrix(test_raw[i], 5, 1);
+        test_labels[i] = 1;
+        i++;
 
         // 5 from N(.5, .5)
-        double test2[5] = { 0.8357,-0.1037, 0.8586, 1.3151, 0.7444 };
-        test_raw[1] = new double[5]; std::copy(test2, test2+5, test_raw[1]);
-        test[1] = Matrix(test_raw[1], 5, 1);
-        test_labels[1] = 1;
+        double test22[5] = { 0.8357,-0.1037, 0.8586, 1.3151, 0.7444};
+        test_raw[i] = new double[5]; std::copy(test22, test22+5, test_raw[i]);
+        test[i] = Matrix(test_raw[i], 5, 1);
+        test_labels[i] = 1;
+        i++;
     }
 
     ~SmallSDMTest() {
@@ -138,41 +157,64 @@ class SmallSDMTest : public ::testing::Test {
             delete[] test_raw[i];
         delete[] test_raw;
     }
+
+    vector< vector<double> > testTrainTest(
+            const NPDivs::DivFunc &div_func,
+            const KernelGroup &kernel_group,
+            vector<double> cs = default_c_vals,
+            size_t tuning_folds = NUM_TRAIN)
+    {
+        // train up the model
+        SDM<double> *model = train_sdm(train, num_train, labels, div_func,
+                kernel_group, div_params, cs, svm_params, tuning_folds);
+
+        // predict on test data
+        vector< vector<double> > vals;
+        vector<int> pred_lab = model->predict(test, num_test, vals);
+
+        // check that labels are as expected
+        for (size_t i = 0; i < num_test; i++) {
+            EXPECT_EQ(test_labels[i], pred_lab[i]) << "mislabeled #" << i;
+        }
+
+        // clean up the model
+        model->destroyModelAndProb();
+        delete model;
+
+        return vals;
+    }
+
+
 };
 
 TEST_F(SmallSDMTest, BasicTrainingTesting) {
-    typedef flann::Matrix<double> Matrix;
-
-    // set up parameters
-    NPDivs::DivL2 div_func;
+    NPDivs::DivRenyi div_func(.9);
 
     std::vector<double> sigs(1, .00671082);
     GaussianKernelGroup kernel_group(sigs, false);
 
     std::vector<double> cs(1, 1./512.);
 
-    svm_params.C = 1./512.;
     svm_params.probability = 0;
+    div_params.k = 2;
 
-    // train a model
-    SDM<double> *model =
-        train_sdm(train, num_train, labels, div_func, kernel_group, div_params,
-                cs, svm_params);
-
-    // predict on the test data
-    vector< vector<double> > vals(2);
-    vector<int> pred_lab = model->predict(test, 2, vals);
-
-    for (size_t i = 0; i < num_test; i++) {
-        EXPECT_EQ(test_labels[i], pred_lab[i]);
-        EXPECT_EQ(0, vals[i][1]);
-    }
+    const vector< vector<double> > &vals =
+        testTrainTest(div_func, kernel_group, cs);
 
     EXPECT_NEAR(.0022, vals[0][0], .0005);
-    EXPECT_NEAR(-.0056, vals[1][0], .0005);
+    EXPECT_NEAR(-.0056, vals[3][0], .0005);
+}
 
-    model->destroyModelAndProb();
-    delete model;
+TEST_F(SmallSDMTest, CVTrainingTesting) {
+    NPDivs::DivL2 div_func;
+    GaussianKernelGroup kernel_group;
+    // LinearKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    const vector< vector<double> > &vals =
+        testTrainTest(div_func, kernel_group);
 }
 
 } // end namespace
