@@ -101,9 +101,8 @@ class SDM {
 // set up default values for training
 
 namespace detail {
-    const double cvals[14] = { // 2^-9, 2^-6, ..., 2^30
-        1./512., 1./64., 1./8., 1, 1 << 3, 1 << 6, 1 << 9, 1 << 12, 1 << 15,
-        1 << 18, 1 << 21, 1 << 24, 1 << 27, 1 << 30
+    const double cvals[11] = { // 2^-9, 2^-6, ..., 2^21
+        1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18, 1<<21
     };
 }
 
@@ -125,7 +124,7 @@ const svm_parameter default_svm_params = {
     1,    // shrinking
     1     // probability
 };
-const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 14);
+const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 11);
 
 // Function to train a new SDM. Note that the caller is responsible for deleting
 // the svm and svm_prob attributes.
@@ -164,6 +163,30 @@ namespace detail {
     }
 
     void print_null(const char *s) {}
+
+    // see whether a kernel is just so horrendous we shouldn't bother
+    bool terrible_kernel(double* km, size_t n, double const_thresh=1e-4) {
+        const double l = n*n;
+
+        // is it all a constant?
+        bool is_const = true;
+        const double v = km[0];
+        const_thresh = std::max(const_thresh, v*const_thresh);
+        for (size_t i = 1; i < l; i++) {
+            if (std::abs(km[i] - v) > const_thresh) {
+                is_const = false;
+                break;
+            }
+        }
+        if (is_const) { // TODO: real logging
+            fprintf(stderr, "Skipping tuning over constant kernel matrix\n");
+            return true;
+        }
+
+        // TODO: other tests?
+
+        return false;
+    }
 
     template <typename T>
     T pick_rand(std::vector<T> vec) {
@@ -268,10 +291,16 @@ SDM<Scalar> * train_sdm(
         double cv_labels[num_train];
 
         for (size_t k = 0; k < kernels.size(); k++) {
-            // turn into a kernel matrix and store in the svm_problem
+            // turn into a kernel matrix
             std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, km);
             kernels[k].transformDivergences(km, num_train);
             project_to_symmetric_psd(km, num_train);
+
+            // is it a constant matrix or something else awful?
+            if (kernels.size() != 1 && detail::terrible_kernel(km, num_train))
+                continue;
+
+            // store in the svm_problem
             detail::store_kernel_matrix(*prob, km, false);
 
             for (size_t ci = 0; ci < c_vals.size(); ci++) {
@@ -284,7 +313,6 @@ SDM<Scalar> * train_sdm(
                     if (cv_labels[i] == labels[i])
                         num_correct++;
 
-                //cout << "k: " << k << " ci: " << ci << " correct: " << num_correct << endl;
                 if (num_correct >= best_correct) {
                     if (num_correct > best_correct) {
                         best_configs.clear();
