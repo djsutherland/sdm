@@ -55,9 +55,9 @@ template <typename Scalar>
 class SDM {
     const svm_model &svm;
     const svm_problem &svm_prob; // needs to live at least as long as the model
-    const NPDivs::DivFunc *div_func;
+    const npdivs::DivFunc *div_func;
     const Kernel *kernel;
-    const NPDivs::DivParams div_params;
+    const npdivs::DivParams div_params;
     const size_t num_classes;
 
     const flann::Matrix<Scalar> *train_bags;
@@ -65,8 +65,8 @@ class SDM {
 
     public:
         SDM(const svm_model &svm, const svm_problem &svm_prob,
-            const NPDivs::DivFunc &div_func, const Kernel &kernel,
-            const NPDivs::DivParams &div_params,
+            const npdivs::DivFunc &div_func, const Kernel &kernel,
+            const npdivs::DivParams &div_params,
             size_t num_classes,
             const flann::Matrix<Scalar> *train_bags, size_t num_train)
         :
@@ -134,9 +134,9 @@ template <typename Scalar>
 SDM<Scalar> * train_sdm(
     const flann::Matrix<Scalar> *train_bags, size_t num_train,
     const std::vector<int> &labels,
-    const NPDivs::DivFunc &div_func,
+    const npdivs::DivFunc &div_func,
     const KernelGroup &kernel_group,
-    const NPDivs::DivParams &div_params,
+    const npdivs::DivParams &div_params,
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3);
@@ -222,9 +222,9 @@ template <typename Scalar>
 SDM<Scalar> * train_sdm(
         const flann::Matrix<Scalar> *train_bags, size_t num_train,
         const std::vector<int> &labels,
-        const NPDivs::DivFunc &div_func,
+        const npdivs::DivFunc &div_func,
         const KernelGroup &kernel_group,
-        const NPDivs::DivParams &div_params,
+        const npdivs::DivParams &div_params,
         const std::vector<double> &c_vals,
         const svm_parameter &svm_params,
         size_t tuning_folds)
@@ -246,7 +246,7 @@ SDM<Scalar> * train_sdm(
 
     // first compute divergences
     flann::Matrix<double>* divs =
-        NPDivs::alloc_matrix_array<double>(1, num_train, num_train);
+        npdivs::alloc_matrix_array<double>(1, num_train, num_train);
     np_divs(train_bags, num_train, div_func, divs, div_params, false);
 
     // set up the basic svm_problem
@@ -332,7 +332,7 @@ SDM<Scalar> * train_sdm(
     kernel.transformDivergences(divs[0].ptr(), num_train);
     project_to_symmetric_psd(divs[0].ptr(), num_train);
     detail::store_kernel_matrix(*prob, divs[0].ptr(), false);
-    NPDivs::free_matrix_array(divs, 1); // don't need these anymore
+    npdivs::free_matrix_array(divs, 1); // don't need these anymore
 
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
@@ -384,9 +384,9 @@ const {
     flann::Matrix<double> backward(bwd_data, num_test, num_train);
 
     // compute divergences
-    NPDivs::np_divs(train_bags, num_train, test_bags, num_test,
+    npdivs::np_divs(train_bags, num_train, test_bags, num_test,
             *div_func, &forward, div_params);
-    NPDivs::np_divs(test_bags, num_test, train_bags, num_train,
+    npdivs::np_divs(test_bags, num_test, train_bags, num_train,
             *div_func, &backward, div_params);
 
     // pass through the kernel

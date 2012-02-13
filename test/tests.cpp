@@ -83,7 +83,7 @@ class EasySmallSDMTest : public ::testing::Test {
     Matrix test[NUM_TEST];
     std::vector<int> test_labels;
 
-    NPDivs::DivParams div_params;
+    npdivs::DivParams div_params;
     svm_parameter svm_params;
 
     EasySmallSDMTest() :
@@ -161,7 +161,7 @@ class EasySmallSDMTest : public ::testing::Test {
     }
 
     vector< vector<double> > testTrainTest(
-            const NPDivs::DivFunc &div_func,
+            const npdivs::DivFunc &div_func,
             const KernelGroup &kernel_group,
             vector<double> cs = default_c_vals,
             size_t tuning_folds = NUM_TRAIN)
@@ -190,7 +190,7 @@ class EasySmallSDMTest : public ::testing::Test {
 };
 
 TEST_F(EasySmallSDMTest, BasicTrainingTesting) {
-    NPDivs::DivL2 div_func;
+    npdivs::DivL2 div_func;
 
     std::vector<double> sigs(1, .00671082);
     GaussianKernelGroup kernel_group(sigs, false);
@@ -205,7 +205,7 @@ TEST_F(EasySmallSDMTest, BasicTrainingTesting) {
 }
 
 TEST_F(EasySmallSDMTest, RenyiCVTrainingTesting) {
-    NPDivs::DivRenyi div_func(.99);
+    npdivs::DivRenyi div_func(.99);
     GaussianKernelGroup kernel_group;
 
     svm_params.probability = 0;
@@ -216,7 +216,7 @@ TEST_F(EasySmallSDMTest, RenyiCVTrainingTesting) {
 }
 
 TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
-    NPDivs::DivLinear div_func;
+    npdivs::DivLinear div_func;
     PolynomialKernelGroup kernel_group;
 
     svm_params.probability = 0;
