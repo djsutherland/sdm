@@ -86,7 +86,7 @@ public:
         : degrees(degrees), coef0s(coef0s)
     {} 
 
-    virtual const boost::ptr_vector<Kernel> getTuningVector(
+    virtual const boost::ptr_vector<Kernel>* getTuningVector(
             double* divs, size_t n) const;
 
 private:

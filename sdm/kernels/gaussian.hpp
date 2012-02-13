@@ -80,7 +80,7 @@ public:
             sigmas(sigmas), scale_sigma(scale_sigma)
     {}
 
-    const boost::ptr_vector<Kernel> getTuningVector(
+    const boost::ptr_vector<Kernel>* getTuningVector(
             double* divs, size_t n) const;
 
 private:

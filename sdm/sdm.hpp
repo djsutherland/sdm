@@ -264,9 +264,9 @@ SDM<Scalar> * train_sdm(
     // TODO: optionally parallelize tuning
 
     // ask the kernel group for the kernels we'll pick from for tuning
-    const boost::ptr_vector<Kernel> &kernels =
+    const boost::ptr_vector<Kernel>* kernels =
         kernel_group.getTuningVector(divs->ptr(), num_train);
-
+    size_t num_kernels = kernels->size();
 
     // want to keep track of the best kernel/C combos...keep all of them, to
     // avoid biasing towards ones we see earlier when accuracies are equal.
@@ -274,10 +274,10 @@ SDM<Scalar> * train_sdm(
     std::vector<config> best_configs;
     size_t best_correct = 0;
 
-    if (kernels.size() == 0) {
+    if (num_kernels == 0) {
         throw std::domain_error("no kernels in the kernel group");
-    } else if (kernels.size() == 1 && c_vals.size() == 1) {
-        best_configs.push_back(config(0, c_vals[0]));
+    } else if (num_kernels == 1 && c_vals.size() == 1) {
+        best_configs.push_back(config(0, 0));
     } else {
         // make a copy of divergences so we can mangle it
         double *km = new double[num_train*num_train];
@@ -285,14 +285,14 @@ SDM<Scalar> * train_sdm(
         // used to store labels into during CV
         double cv_labels[num_train];
 
-        for (size_t k = 0; k < kernels.size(); k++) {
+        for (size_t k = 0; k < num_kernels; k++) {
             // turn into a kernel matrix
             std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, km);
-            kernels[k].transformDivergences(km, num_train);
+            (*kernels)[k].transformDivergences(km, num_train);
             project_to_symmetric_psd(km, num_train);
 
             // is it a constant matrix or something else awful?
-            if (kernels.size() != 1 && detail::terrible_kernel(km, num_train))
+            if (num_kernels != 1 && detail::terrible_kernel(km, num_train))
                 continue;
 
             // store in the svm_problem
@@ -323,13 +323,15 @@ SDM<Scalar> * train_sdm(
 
     // choose a kernel / C combo as the best one
     const config &best_config = detail::pick_rand(best_configs);
-    const Kernel &kernel = kernels[best_config.first];
+    const Kernel *kernel = new_clone((*kernels)[best_config.first]);
     svm_p.C = c_vals[best_config.second];
+
+    delete kernels; // FIXME: potential leaks in here if something crashes
 
     ////////////////////////////////////////////////////////////////////////////
     // train final SVM on the whole thing
 
-    kernel.transformDivergences(divs[0].ptr(), num_train);
+    kernel->transformDivergences(divs[0].ptr(), num_train);
     project_to_symmetric_psd(divs[0].ptr(), num_train);
     detail::store_kernel_matrix(*prob, divs[0].ptr(), false);
     npdivs::free_matrix_array(divs, 1); // don't need these anymore
@@ -340,8 +342,9 @@ SDM<Scalar> * train_sdm(
         throw std::domain_error(error);
     }
     svm_model *svm = svm_train(prob, &svm_p);
-    return new SDM<Scalar>(*svm, *prob, div_func, kernel, div_params,
-            svm_get_nr_class(svm), train_bags, num_train);
+    SDM<Scalar>* sdm = new SDM<Scalar>(*svm, *prob, div_func, *kernel,
+            div_params, svm_get_nr_class(svm), train_bags, num_train);
+    delete kernel;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -427,7 +430,7 @@ const {
 
         // ask the SVM for a prediction
         double res = pred_fn(&svm, kernel_row, &vals[i][0]);
-        pred_labels[i] = std::floor(res + .5);
+        pred_labels[i] = (int) std::floor(res + .5);
     }
 
     return pred_labels;

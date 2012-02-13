@@ -59,7 +59,7 @@ GaussianKernel* GaussianKernel::do_clone() const {
 
 typedef std::vector<double>::const_iterator double_iter;
 
-const boost::ptr_vector<Kernel> GaussianKernelGroup::getTuningVector(
+const boost::ptr_vector<Kernel>* GaussianKernelGroup::getTuningVector(
         double* divs, size_t n) const
 {
     double scale;
@@ -79,10 +79,10 @@ const boost::ptr_vector<Kernel> GaussianKernelGroup::getTuningVector(
         scale = 1.0;
     }
 
-    boost::ptr_vector<Kernel> kerns;
-    kerns.reserve(sigmas.size());
+    boost::ptr_vector<Kernel> *kerns = new boost::ptr_vector<Kernel>;
+    kerns->reserve(sigmas.size());
     for (double_iter i = sigmas.begin(); i != sigmas.end(); ++i) {
-        kerns.push_back(new GaussianKernel(*i * scale));
+        kerns->push_back(new GaussianKernel(*i * scale));
     }
     return kerns;
 }

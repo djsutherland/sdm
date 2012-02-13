@@ -55,13 +55,13 @@ PolynomialKernel* PolynomialKernel::do_clone() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const boost::ptr_vector<Kernel> PolynomialKernelGroup::getTuningVector(
+const boost::ptr_vector<Kernel>* PolynomialKernelGroup::getTuningVector(
         double* divs, size_t n)
 const {
-    boost::ptr_vector<Kernel> kerns;
+    boost::ptr_vector<Kernel>* kerns = new boost::ptr_vector<Kernel>;
     for (size_t d = 0; d < degrees.size(); d++) {
         for (size_t c = 0; c < coef0s.size(); c++) {
-            kerns.push_back(new PolynomialKernel(degrees[d], coef0s[c]));
+            kerns->push_back(new PolynomialKernel(degrees[d], coef0s[c]));
         }
     }
     return kerns;
