@@ -14,8 +14,15 @@ target_link_libraries(sdm
     ${LAPACK_LIBRARIES}
 )
 
+
+add_executable(sdm-run
+    cli.cpp
+)
+target_link_libraries(sdm-run sdm ${Boost_LIBRARIES})
+
+
 install(
-    TARGETS sdm
+    TARGETS sdm sdm-run
     EXPORT SDMLibraryDepends
     RUNTIME DESTINATION "${INSTALL_BIN_DIR}" COMPONENT bin
     LIBRARY DESTINATION "${INSTALL_LIB_DIR}" COMPONENT shlib
