@@ -345,6 +345,7 @@ SDM<Scalar> * train_sdm(
     SDM<Scalar>* sdm = new SDM<Scalar>(*svm, *prob, div_func, *kernel,
             div_params, svm_get_nr_class(svm), train_bags, num_train);
     delete kernel;
+    return sdm;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
