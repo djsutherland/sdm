@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -52,25 +53,23 @@
 #include <np-divs/matrix_io.hpp>
 #include <np-divs/div-funcs/from_str.hpp>
 
-// TODO: more general CLI (multiclass, etc)
-//       probably switch to a "train_bags" that includes labels
+// TODO: support CV
+// TODO: warn about dumb parameter combos, like linear kernel with distance df
 
 using std::cerr;
 using std::cin;
 using std::cout;
-using std::ifstream;
 using std::endl;
+using std::ifstream;
 using std::string;
+using std::vector;
 
 namespace po = boost::program_options;
 
 // TODO: leaks memory everywhere, but whatever...
 struct ProgOpts : boost::noncopyable {
-    string pos_bags_file;
-    string neg_bags_file;
-
+    string train_bags_file;
     string test_bags_file;
-    string test_labels_file;
 
     npdivs::DivFunc * div_func;
     sdm::KernelGroup * kernel_group;
@@ -129,73 +128,73 @@ int main(int argc, char ** argv) {
         // TODO: gracefully handle nonexisting files
         // TODO: more robust input checking
 
-        // load positives
-        size_t num_pos;
-        Matrix* pos_bags;
-        if (opts.pos_bags_file == "-") {
-            cout << "Enter positive training distributions in CSV-like "
-                "format: one line with comma-separated values for each "
+        // load training bags
+        size_t num_train;
+        Matrix* train_bags;
+        vector<string> train_labels;
+
+        if (opts.train_bags_file == "-") {
+            cout << "Enter training distributions in CSV-like "
+                "format: an initial string label for each distribution, one "
+                "line with comma-separated floating-point values for each "
                 "point, one blank line between distributions, and an extra "
                 "blank line when done.\n";
-            pos_bags = npdivs::matrices_from_csv(std::cin, num_pos);
+            train_bags = npdivs::labeled_matrices_from_csv(
+                    std::cin, num_train, train_labels);
         } else {
-            ifstream ifs(opts.pos_bags_file.c_str(), ifstream::in);
-            pos_bags = npdivs::matrices_from_csv(ifs, num_pos);
+            ifstream ifs(opts.train_bags_file.c_str(), ifstream::in);
+            train_bags = npdivs::labeled_matrices_from_csv(
+                    ifs, num_train, train_labels);
         }
-
-        // load negatives
-        size_t num_neg;
-        Matrix* neg_bags;
-        if (opts.neg_bags_file == "-") {
-            cout << "Enter negative training distributions in CSV-like "
-                "format: one line with comma-separated values for each "
-                "point, one blank line between distributions, and an extra "
-                "blank line when done.\n";
-            neg_bags = npdivs::matrices_from_csv(cin, num_neg);
-        } else {
-            ifstream ifs(opts.neg_bags_file.c_str(), ifstream::in);
-            neg_bags = npdivs::matrices_from_csv(ifs, num_neg);
-        }
-
-        // combine training bags - TODO: this leaks memory
-        Matrix* train_bags = new Matrix[num_pos + num_neg];
-        for (size_t i = 0; i < num_pos; i++)
-            train_bags[i] = pos_bags[i];
-        for (size_t i = 0; i < num_neg; i++)
-            train_bags[num_pos + i] = neg_bags[i];
 
         // load test
         size_t num_test;
         Matrix* test_bags;
+        vector<string> test_labels;
+
         if (opts.test_bags_file == "-") {
             cout << "Enter testing distributions in CSV-like "
-                "format: one line with comma-separated values for each "
+                "format: an initial string label for each distribution, one "
+                "line with comma-separated floating-point values for each "
                 "point, one blank line between distributions, and an extra "
                 "blank line when done.\n";
-            test_bags = npdivs::matrices_from_csv(cin, num_test);
+            test_bags = npdivs::labeled_matrices_from_csv(
+                    cin, num_test, test_labels);
         } else {
             ifstream ifs(opts.test_bags_file.c_str(), ifstream::in);
-            test_bags = npdivs::matrices_from_csv(ifs, num_test);
+            test_bags = npdivs::labeled_matrices_from_csv(
+                    ifs, num_test, test_labels);
         }
 
-        // load test labels, maybe
-        std::vector<int> test_labels;
-        if (opts.test_labels_file == "-") {
-            cout << "Input test labels, separated by whitespace: ";
-            test_labels.resize(num_test);
-            for (size_t i = 0; i < num_test; i++)
-                cin >> test_labels[i];
-        } else if (opts.test_labels_file != "") {
-            ifstream ifs(opts.test_labels_file.c_str(), ifstream::in);
+        // convert labels into integers
+        // make maps to convert between int / string labels
+        int this_label = -1;
+        std::map<string,int> labels_to_int;
+        std::map<int,string> labels_to_string;
 
-            test_labels.resize(num_test);
-            for (size_t i = 0; i < num_test; i++)
-                ifs >> test_labels[i];
+        std::vector<int> train_labels_ints;
+        train_labels_ints.reserve(num_train);
+        for (size_t i = 0; i < num_train; i++) {
+            const string &lbl = train_labels[i];
+
+            if (labels_to_int.count(lbl) == 0) {
+                labels_to_int[lbl] = ++this_label;
+                labels_to_string[this_label] = lbl;
+            }
+            train_labels_ints.push_back(labels_to_int[lbl]);
         }
 
-        // set up labels
-        std::vector<int> labels(num_pos + num_neg, 0); // all 0s
-        std::fill_n(labels.begin(), num_pos, 1); // 1s then 0s
+        std::vector<int> test_labels_ints;
+        test_labels_ints.reserve(num_test);
+        for (size_t i = 0; i < num_train; i++) {
+            const string &lbl = test_labels[i];
+
+            if (labels_to_int.count(lbl) == 0) {
+                labels_to_int[lbl] = ++this_label;
+                labels_to_string[this_label] = lbl;
+            }
+            test_labels_ints.push_back(labels_to_int[lbl]);
+        }
 
         // div params
         npdivs::DivParams div_params(opts.k,
@@ -208,7 +207,7 @@ int main(int argc, char ** argv) {
 
         // train the model
         sdm::SDM<double>* model = train_sdm(
-                train_bags, num_pos + num_neg, labels,
+                train_bags, num_train, train_labels_ints,
                 *opts.div_func, *opts.kernel_group, div_params,
                 sdm::default_c_vals, svm_params, opts.tuning_folds);
 
@@ -216,20 +215,17 @@ int main(int argc, char ** argv) {
         const std::vector<int> &preds = model->predict(test_bags, num_test);
 
         // output predictions // TODO: optionally into file?
-        cout << "Predicted labels: ";
+        cout << "Predicted labels:\n";
         for (size_t i = 0; i < num_test; i++) {
-            cout << preds[i] << " ";
+            cout << labels_to_string[preds[i]] << endl;
         }
-        cout << endl;
 
         // test accuracy, if available
-        if (test_labels.size() > 0) {
-            size_t num_correct = 0;
-            for (size_t i = 0; i < num_test; i++)
-                if (preds[i] == test_labels[i])
-                    num_correct++;
-            cout << "Accuracy: " << num_correct * 100. / num_test << "%\n";
-        }
+        size_t num_correct = 0;
+        for (size_t i = 0; i < num_test; i++)
+            if (preds[i] == test_labels_ints[i])
+                num_correct++;
+        cout << "Accuracy: " << num_correct * 100. / num_test << "%\n";
 
         // clean up
         model->destroyModelAndProb();
@@ -246,26 +242,15 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
     po::options_description desc("Allowed options");
     desc.add_options()
         ("help,h", "Produce this help message.")
-        ("pos-bags,p",
-            po::value<string>(&opts.pos_bags_file)->default_value("-"),
-            "CSV-style file containing matrices separated by blank lines; "
+        ("train-bags,b",
+            po::value<string>(&opts.train_bags_file)->default_value("-"),
+            "CSV-like file containing matrices separated by blank lines, "
+            "with a string label on its own line before each matrix; "
             "- means stdin.")
-        ("neg-bags,n",
-            po::value<string>(&opts.neg_bags_file)->default_value("-"),
-            "CSV-style file containing matrices separated by blank lines; "
-            "- means stdin; if both pos and neg are read from stdin, pos "
-            "is read first and the two groups must be separated by exactly "
-            "two blank lines.")
         ("test-bags,t",
             po::value<string>(&opts.test_bags_file)->default_value("-"),
             "CSV-style file containing matrices separated by blank lines; "
-            "- means stdin; again must be separated from previous groups by "
-            "exactly two blank lines.")
-        ("test-labels,l",
-            po::value<string>(&opts.test_labels_file)->default_value(""),
-            "A file containing labels for the test distributions, in the "
-            "same order, one per line. Used to print out test accuracy; "
-            "- means stdin, separate by exactly two blank lines.")
+            "- means stdin.")
         ("div-func,d",
             po::value<string>()->default_value("l2")->notifier(
                 boost::bind(&ProgOpts::parse_div_func, boost::ref(opts), _1)),
