@@ -13,6 +13,9 @@ target_link_libraries(sdm
     ${BLAS_LIBRARIES}
     ${LAPACK_LIBRARIES}
 )
+if(CMAKE_COMPILER_IS_GNUCC AND NOT(BUILD_SHARED_LIBS))
+    set_target_properties(sdm PROPERTIES COMPILE_FLAGS -fPIC)
+endif()
 
 
 add_executable(sdm-run
