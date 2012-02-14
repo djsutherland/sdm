@@ -7,6 +7,8 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
+option(BUILD_SHARED_LIBS "Build the libraries as shared." ON)
+
 # version info
 set(SDM_MAJOR_VERSION 0)
 set(SDM_MINOR_VERSION 1)
