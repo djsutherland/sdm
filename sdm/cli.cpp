@@ -172,6 +172,10 @@ int main(int argc, char ** argv) {
         std::map<string,int> labels_to_int;
         std::map<int,string> labels_to_string;
 
+        labels_to_int[""] = -1;
+        labels_to_int["?"] = -1;
+        labels_to_string[-1] = "?";
+
         std::vector<int> train_labels_ints;
         train_labels_ints.reserve(num_train);
         for (size_t i = 0; i < num_train; i++) {
@@ -222,10 +226,18 @@ int main(int argc, char ** argv) {
 
         // test accuracy, if available
         size_t num_correct = 0;
-        for (size_t i = 0; i < num_test; i++)
-            if (preds[i] == test_labels_ints[i])
+        size_t total = num_test;
+        for (size_t i = 0; i < num_test; i++) {
+            if (test_labels_ints[i] == -1) {
+                total--;
+            } else if (preds[i] == test_labels_ints[i]) {
                 num_correct++;
-        cout << "Accuracy: " << num_correct * 100. / num_test << "%\n";
+            }
+        }
+        if (total > 0) {
+            cout << "Accuracy on " << total << " labeled test points: "
+                << num_correct * 100. / total << "%\n";
+        }
 
         // clean up
         model->destroyModelAndProb();
@@ -249,24 +261,30 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             "- means stdin.")
         ("test-bags,t",
             po::value<string>(&opts.test_bags_file)->default_value("-"),
-            "CSV-style file containing matrices separated by blank lines; "
-            "- means stdin.")
+            "CSV-style file containing matrices separated by blank lines, "
+            "with a string label on its own line before each matrix."
+            "- means stdin. "
+            "Use a blank line or ? as the label if it's not known. If any "
+            "test distributions are labeled, will report accuracy on them.")
         ("div-func,d",
             po::value<string>()->default_value("l2")->notifier(
                 boost::bind(&ProgOpts::parse_div_func, boost::ref(opts), _1)),
             "Divergence function to use. Format is name[:arg1[:arg2...]]. "
             "Options include alpha, bc, hellinger, l2, linear, renyi. "
-            "alpha and renyi take an optional second argument, so that "
-            "e.g. renyi:.8 is the Renyi-.8 divergence. All options take a "
-            "last argument that specifies how large intermediate values are "
-            "normalized; the default .99 means to cap certain values at the "
-            "99th percentile of their distribution, and 1 means not to do "
-            " this.")
+            "\nalpha and renyi take an optional second argument, so that "
+            "e.g. renyi:.8 is the Renyi-.8 divergence."
+            "\nAll options take a last argument that specifies how large "
+            " intermediate values are  normalized; the default .99 means to "
+            "cap certain values at the 99th percentile of their distribution, "
+            "and 1 means not to do this.")
         ("kernel,k",
             po::value<string>()->default_value("gaussian")->notifier(
                 boost::bind(&ProgOpts::parse_kernel, boost::ref(opts), _1)),
             "Kernel type to use. Options are gaussian, linear, polynomial. "
-            "Note that cross-validation is done to select gaussian kernel "
+            "\nUse '-k linear' or '-k polynomial' only with '-d linear'; any "
+            "of the other -d arguments should be used with '-k gaussian' "
+            "in order to get a meaningful kernel. "
+            "\nNote that cross-validation is done to select gaussian kernel "
             "width or polynomial degree, in combination with SVM C; this is "
             "not yet configurable through this interface.")
         ("tuning-folds,f",
@@ -287,7 +305,7 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             po::value<string>()->default_value("kdtree")->notifier(
                 boost::bind(&ProgOpts::parse_index, boost::ref(opts), _1)),
             "The nearest-neighbor index to use. Options: linear, kdtree. "
-            "Note that this can have a large effect on calculation time: "
+            "\nNote that this can have a large effect on calculation time: "
             "use kdtree for low-dimensional data and linear for relatively "
             "sparse high-dimensional data (about about 10).")
     ;
