@@ -126,10 +126,17 @@ int main(int argc, char ** argv) {
         if (!parse_args(argc, argv, opts))
             return 1;
 
-        // load positives  // TODO: gracefully handle nonexisting files
+        // TODO: gracefully handle nonexisting files
+        // TODO: more robust input checking
+
+        // load positives
         size_t num_pos;
         Matrix* pos_bags;
         if (opts.pos_bags_file == "-") {
+            cout << "Enter positive training distributions in CSV-like "
+                "format: one line with comma-separated values for each "
+                "point, one blank line between distributions, and an extra "
+                "blank line when done.\n";
             pos_bags = npdivs::matrices_from_csv(std::cin, num_pos);
         } else {
             ifstream ifs(opts.pos_bags_file.c_str(), ifstream::in);
@@ -140,6 +147,10 @@ int main(int argc, char ** argv) {
         size_t num_neg;
         Matrix* neg_bags;
         if (opts.neg_bags_file == "-") {
+            cout << "Enter negative training distributions in CSV-like "
+                "format: one line with comma-separated values for each "
+                "point, one blank line between distributions, and an extra "
+                "blank line when done.\n";
             neg_bags = npdivs::matrices_from_csv(cin, num_neg);
         } else {
             ifstream ifs(opts.neg_bags_file.c_str(), ifstream::in);
@@ -157,6 +168,10 @@ int main(int argc, char ** argv) {
         size_t num_test;
         Matrix* test_bags;
         if (opts.test_bags_file == "-") {
+            cout << "Enter testing distributions in CSV-like "
+                "format: one line with comma-separated values for each "
+                "point, one blank line between distributions, and an extra "
+                "blank line when done.\n";
             test_bags = npdivs::matrices_from_csv(cin, num_test);
         } else {
             ifstream ifs(opts.test_bags_file.c_str(), ifstream::in);
@@ -207,6 +222,7 @@ int main(int argc, char ** argv) {
         }
         cout << endl;
 
+        // test accuracy, if available
         if (test_labels.size() > 0) {
             size_t num_correct = 0;
             for (size_t i = 0; i < num_test; i++)
@@ -294,7 +310,7 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
     po::variables_map vm;
     try {
         po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
-        
+
         if (vm.count("help")) {
             cout << desc << endl;
             std::exit(0);
