@@ -222,8 +222,13 @@ int main(int argc, char ** argv) {
         cout << "Predicted labels:\n";
         for (size_t i = 0; i < num_test; i++) {
             cout << i << ":\t" << labels_to_string[preds[i]];
-            if (test_labels_ints[i] != -1)
-                cout << "\t -- expected " << test_labels[i];
+            if (test_labels_ints[i] != -1) {
+                if (test_labels_ints[i] == preds[i]) {
+                    cout << "\t -- correct";
+                } else {
+                    cout << "\t -- expected " << test_labels[i];
+                }
+            }
             cout << endl;
         }
 
