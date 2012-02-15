@@ -7,7 +7,8 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-option(BUILD_SHARED_LIBS "Build the libraries as shared." ON)
+option(EXE_LINK_SHARED
+    "Link the executable to the shared library, rather than the static." ON)
 
 # version info
 set(SDM_MAJOR_VERSION 0)
@@ -49,7 +50,9 @@ find_package(LibSVM REQUIRED)
 include_directories(${LIBSVM_INCLUDE_DIRS})
 link_directories(${LIBSVM_LIBRARY_DIRS})
 
-find_package(Boost REQUIRED)
+find_package(Threads)
+
+find_package(Boost COMPONENTS thread program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
 
@@ -83,7 +86,7 @@ add_subdirectory(test)
 ## stuff for making NPDivsConfig.cmake
 
 # add targets to build-tree export set
-export(TARGETS sdm
+export(TARGETS sdm sdm_s sdm-run
     FILE "${PROJECT_BINARY_DIR}/SDMLibraryDepends.cmake")
 
 # register package with cmake registry
