@@ -221,7 +221,10 @@ int main(int argc, char ** argv) {
         // output predictions // TODO: optionally into file?
         cout << "Predicted labels:\n";
         for (size_t i = 0; i < num_test; i++) {
-            cout << labels_to_string[preds[i]] << endl;
+            cout << i << ":\t" << labels_to_string[preds[i]];
+            if (test_labels_ints[i] != -1)
+                cout << "\t -- expected " << test_labels[i];
+            cout << endl;
         }
 
         // test accuracy, if available
