@@ -295,7 +295,7 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             "The number of folds to use for the parameter tuning "
             "cross-validation.")
         ("probability,P",
-            po::value<bool>(&opts.prob)->zero_tokens(),
+            po::value<bool>(&opts.prob)->default_value(0)->zero_tokens(),
             "Use probability estimates in the trained SVMs.")
         ("num-threads,T",
             po::value<size_t>(&opts.num_threads)->default_value(0),
