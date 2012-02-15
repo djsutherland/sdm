@@ -37,7 +37,7 @@ endforeach()
 
 # find dependencies, etc
 
-include_directories(${PROJECT_SOURCE_DIR})
+include_directories(BEFORE ${PROJECT_SOURCE_DIR})
 
 find_package(NPDivs REQUIRED)
 include_directories(${NPDIVS_INCLUDE_DIRS})
