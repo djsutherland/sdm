@@ -542,10 +542,13 @@ double crossvalidate(
     if (folds <= 1) {
         throw std::domain_error((boost::format(
                     "Can't cross-validate with %d folds...") % folds).str());
+    } else if (folds > num_bags) {
+        throw std::domain_error((boost::format(
+            "Can't use %d folds with only %d bags.") % folds % num_bags).str());
     }
 
     size_t num_train = (size_t) std::ceil(num_bags * (1. - 1. / folds));
-    size_t num_test  = (size_t) std::ceil(num_bags / folds);
+    size_t num_test  = (size_t) std::ceil(double(num_bags) / folds);
 
     Matrix *train_bags = new Matrix[num_train];
     Matrix *test_bags  = new Matrix[num_test];
@@ -573,9 +576,12 @@ double crossvalidate(
     for (size_t fold = 0; fold < folds; fold++) {
         // testing is in [test_start, test_end)
         size_t test_start = fold * num_test;
-        size_t test_end = std::min((fold + 1) * num_test, num_bags);
+        size_t test_end = std::min(test_start + num_test, num_bags);
         size_t this_num_test = test_end - test_start;
         size_t this_num_train = num_bags - this_num_test;
+
+        if (test_start == test_end)
+            break;
 
         // copy into training / testing data
         for (size_t i = 0; i < test_start; i++)

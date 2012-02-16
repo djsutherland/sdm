@@ -261,7 +261,8 @@ int main(int argc, char ** argv) {
                     train_labels_ints, *opts.div_func, *opts.kernel_group,
                     div_params, opts.cv_folds, !opts.proj_indiv,
                     sdm::default_c_vals, svm_params, opts.tuning_folds);
-            cout << "Cross-validation accuracy: " << 100. * acc << "%" << endl;
+            cout << opts.cv_folds << "-fold cross-validation accuracy on "
+                << num_train << " bags: " << 100. * acc << "%" << endl;
         }
 
         // cleanup
