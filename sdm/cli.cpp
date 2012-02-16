@@ -80,6 +80,7 @@ struct ProgOpts : boost::noncopyable {
     size_t cv_folds;
     size_t tuning_folds;
     bool prob;
+    bool proj_indiv;
 
     flann::IndexParams * index_params;
     flann::SearchParams * search_params;
@@ -154,13 +155,15 @@ int main(int argc, char ** argv) {
         Matrix* test_bags;
         vector<string> test_labels;
 
-        if (opts.cv_folds ==  0) {
+        bool do_cv = opts.test_bags_file.empty();
+
+        if (!do_cv) {
             if (opts.test_bags_file == "-") {
                 cout << "Enter testing distributions in CSV-like "
-                    "format: an initial string label for each distribution, one "
-                    "line with comma-separated floating-point values for each "
-                    "point, one blank line between distributions, and an extra "
-                    "blank line when done.\n";
+                    "format: an initial string label for each distribution, "
+                    "one line with comma-separated floating-point values for "
+                    "each point, one blank line between distributions, and an "
+                    "extra blank line when done.\n";
                 test_bags = npdivs::labeled_matrices_from_csv(
                         cin, num_test, test_labels);
             } else {
@@ -194,7 +197,7 @@ int main(int argc, char ** argv) {
 
         std::vector<int> test_labels_ints;
         test_labels_ints.reserve(num_test);
-        for (size_t i = 0; i < num_train; i++) {
+        for (size_t i = 0; i < num_test; i++) {
             const string &lbl = test_labels[i];
 
             if (labels_to_int.count(lbl) == 0) {
@@ -213,7 +216,7 @@ int main(int argc, char ** argv) {
         svm_parameter svm_params(sdm::default_svm_params);
         svm_params.probability = (int) opts.prob;
 
-        if (opts.cv_folds == 0) {
+        if (!do_cv) {
             // train the model
             sdm::SDM<double>* model = train_sdm(
                     train_bags, num_train, train_labels_ints,
@@ -265,25 +268,21 @@ int main(int argc, char ** argv) {
             model->destroyModelAndProb();
             delete model;
         } else {
-            // TODO: optionally project all the data beforehand?
-            // TODO: actually, this should be a general-use SDM method that
-            //       we just call from here...
-            for (size_t cv = 0; cv < opts.cv_folds; cv++) {
-                // do test/train split
-
-                // train the model
-
-                // predict on test data
-            }
+            double acc = crossvalidate(train_bags, num_train,
+                    train_labels_ints, *opts.div_func, *opts.kernel_group,
+                    div_params, opts.cv_folds, !opts.proj_indiv,
+                    sdm::default_c_vals, svm_params, opts.tuning_folds);
+            cout << "Cross-validation accuracy: " << 100. * acc << "%" << endl;
         }
 
         // cleanup
         npdivs::free_matrix_array(train_bags, num_train);
-        npdivs::free_matrix_array(test_bags, num_test);
+        if (!do_cv)
+            npdivs::free_matrix_array(test_bags, num_test);
 
     } catch (std::exception &e) {
-        cerr << "Error: " << e.what() << endl;
-        return 1;
+         cerr << "Error: " << e.what() << endl;
+         return 1;
     }
 }
 
@@ -297,16 +296,16 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             "with a string label on its own line before each matrix; "
             "- means stdin.")
         ("test-bags,t",
-            po::value<string>(&opts.test_bags_file)->default_value("-"),
+            po::value<string>(&opts.test_bags_file)->default_value(""),
             "CSV-style file containing matrices separated by blank lines, "
             "with a string label on its own line before each matrix."
             "- means stdin. "
-            "Use a blank line or ? as the label if it's not known. If any "
+            "\nUse a blank line or ? as the label if it's not known. If any "
             "test distributions are labeled, will report accuracy on them.")
         ("cv-folds,c",
-            po::value<size_t>(&opts.cv_folds)->default_value(0),
+            po::value<size_t>(&opts.cv_folds)->default_value(10),
             "Do c-fold cross-validation on the data passed in --train-bags. "
-            "Invalid to pass along with --test-bags.")
+            "Ignored if --test-bags is passed.")
         ("div-func,d",
             po::value<string>()->default_value("l2")->notifier(
                 boost::bind(&ProgOpts::parse_div_func, boost::ref(opts), _1)),
@@ -335,6 +334,10 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
         ("probability,P",
             po::value<bool>(&opts.prob)->default_value(0)->zero_tokens(),
             "Use probability estimates in the trained SVMs.")
+        ("project-individually,J",
+            po::value<bool>(&opts.proj_indiv)->default_value(0)->zero_tokens(),
+            "When cross-validating, do the PSD projection on each fold's "
+            "training data only, rather than on the entire kernel matrix.")
         ("num-threads,T",
             po::value<size_t>(&opts.num_threads)->default_value(0),
             "Number of threads to use for calculations. 0 means one per core "
@@ -362,10 +365,6 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
 
         po::notify(vm);
 
-        if (opts.cv_folds != 0 && opts.test_bags_file != "-") {
-            cerr << "Error: can't do cross-validation and have test data\n";
-            return false;
-        }
     } catch (std::exception &e) {
         cerr << "Error: " << e.what() << endl;
         return false;

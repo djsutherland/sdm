@@ -193,7 +193,7 @@ namespace detail {
             }
         }
         if (is_const) { // TODO: real logging
-            fprintf(stderr, "Skipping tuning over constant kernel matrix\n");
+            //fprintf(stderr, "Skipping tuning over constant kernel matrix\n");
             return true;
         }
 
