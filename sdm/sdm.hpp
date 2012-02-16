@@ -141,11 +141,27 @@ SDM<Scalar> * train_sdm(
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3);
 
+
+// Function to do cross-validation on
+template <typename Scalar>
+double crossvalidate(
+    const flann::Matrix<Scalar> *bags, size_t num_bags,
+    const std::vector<int> &labels,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    size_t folds = 10,
+    bool project_all_data = true,
+    const std::vector<double> &c_vals = default_c_vals,
+    const svm_parameter &svm_params = default_svm_params,
+    size_t tuning_folds = 3);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
 
 namespace detail {
-    void store_kernel_matrix(svm_problem &prob, double *divs, bool alloc) {
+    void store_kernel_matrix(svm_problem &prob, const double *divs, bool alloc)
+    {
         size_t n = prob.l;
         if (alloc) prob.x = new svm_node*[n];
 
@@ -199,6 +215,127 @@ namespace detail {
             return vec[std::rand() % n];
         }
     }
+
+    // cross-validation over possible svm / kernel parameters
+    // TODO: optionally parallelize tuning
+    // TODO: move into .cpp?
+    std::pair<size_t, size_t> tune_params(
+            const double* divs, size_t num_bags,
+            const std::vector<int> &labels,
+            const boost::ptr_vector<Kernel> &kernels,
+            const std::vector<double> &c_vals,
+            svm_parameter &svm_params,
+            size_t folds)
+    {
+        typedef std::pair<size_t, size_t> config;
+        size_t num_kernels = kernels.size();
+
+        if (num_kernels == 0) {
+            throw std::domain_error("no kernels in the kernel group");
+        } else if (num_kernels == 1 && c_vals.size() == 1) {
+            return config(0, 0);
+        }
+
+        // make our svm_problem that we'll be reusing throughout
+        svm_problem *prob = new svm_problem;
+        prob->l = num_bags;
+        prob->y = new double[num_bags];
+        for (size_t i = 0; i < num_bags; i++)
+            prob->y[i] = (double) labels[i];
+
+        // store un-transformed divs in the problem just so it's all allocated
+        store_kernel_matrix(*prob, divs, true);
+
+        // keep track of the best kernel/C combos
+        // keep all with same acc, to avoid bias towards ones we see earlier
+        std::vector<config> best_configs;
+        size_t best_correct = 0;
+
+        // make a copy of divergences so we can mangle it
+        double *km = new double[num_bags * num_bags];
+
+        // used to store labels into during CV
+        double *cv_labels = new double[num_bags];
+
+        for (size_t k = 0; k < num_kernels; k++) {
+            // turn into a kernel matrix
+            std::copy(divs, divs + num_bags * num_bags, km);
+            kernels[k].transformDivergences(km, num_bags);
+            project_to_symmetric_psd(km, num_bags);
+
+            // is it a constant matrix or something else awful?
+            if (num_kernels != 1 && terrible_kernel(km, num_bags))
+                continue;
+
+            // store in the svm_problem
+            store_kernel_matrix(*prob, km, false);
+
+            for (size_t ci = 0; ci < c_vals.size(); ci++) {
+                // do SVM cross-validation with these params
+                svm_params.C = c_vals[ci];
+                svm_cross_validation(prob, &svm_params, folds, cv_labels);
+
+                size_t num_correct = 0;
+                for (size_t i = 0; i < num_bags; i++)
+                    if (cv_labels[i] == labels[i])
+                        num_correct++;
+
+                if (num_correct >= best_correct) {
+                    if (num_correct > best_correct) {
+                        best_configs.clear();
+                        best_correct = num_correct;
+                    }
+                    best_configs.push_back(std::make_pair(k, ci));
+                }
+            }
+        }
+
+        delete[] km;
+        delete[] cv_labels;
+
+        for (size_t i = 0; i < num_bags; i++)
+            delete[] prob->x[i];
+        delete[] prob->x;
+        delete[] prob->y;
+        delete prob;
+
+        return pick_rand(best_configs);
+    }
+
+    void copy_from_full_to_split(const double *source,
+            double *train, double *test,
+            size_t test_start, size_t num_train, size_t num_test)
+    {
+        const size_t test_end = test_start + num_test;
+        const size_t num_bags = num_train + num_test;
+
+        double *dest;
+        size_t dest_row;
+        size_t full_row;
+
+        for (size_t i = 0; i < num_bags; i++) {
+            full_row = i * num_bags;
+
+            if (i < test_start) { // into first part of training
+                dest = train;
+                dest_row = i * num_train;
+            } else if (i < test_end) { // into testing
+                dest = test;
+                dest_row = (i - test_start) * num_train;
+            } else { // into second part of training
+                dest = train;
+                dest_row = (i - num_test) * num_train;
+            }
+
+            // first part of training
+            for (size_t j = 0; j < test_start; j++)
+                dest[dest_row + j] = source[full_row + j];
+
+            // second part of training
+            for (size_t j = test_end; j < num_bags; j++)
+                dest[dest_row + j - num_test] = source[full_row + j];
+        }
+    }
 }
 
 template <typename Scalar>
@@ -249,102 +386,49 @@ SDM<Scalar> * train_sdm(
         npdivs::alloc_matrix_array<double>(1, num_train, num_train);
     np_divs(train_bags, num_train, div_func, divs, div_params, false);
 
-    // set up the basic svm_problem
+    // ask the kernel group for the kernels we'll pick from for tuning
+    const boost::ptr_vector<Kernel>* kernels =
+        kernel_group.getTuningVector(divs->ptr(), num_train);
+
+    // tuning: cross-validate over possible svm/kernel parameters
+    const std::pair<size_t, size_t> &best_config =
+        detail::tune_params(divs[0].ptr(), num_train, labels, *kernels,
+                c_vals, svm_p, tuning_folds);
+
+    // copy the kernel object so we can free the rest
+    const Kernel *kernel = new_clone((*kernels)[best_config.first]);
+    svm_p.C = c_vals[best_config.second];
+    delete kernels; // FIXME: potential leaks in here if something crashes
+
+    // compute the final kernel matrix
+    kernel->transformDivergences(divs[0].ptr(), num_train);
+    project_to_symmetric_psd(divs[0].ptr(), num_train);
+
+    // set up the svm_problem
     svm_problem *prob = new svm_problem;
     prob->l = num_train;
     prob->y = new double[num_train];
     for (size_t i = 0; i < num_train; i++)
         prob->y[i] = labels[i];
-
-    // store un-transformed divs in the problem just so it's all allocated
     detail::store_kernel_matrix(*prob, divs[0].ptr(), true);
 
-    ////////////////////////////////////////////////////////////////////////////
-    // tuning: cross-validate over possible svm/kernel parameters
-    // TODO: optionally parallelize tuning
+    // don't need the kernel values anymore
+    npdivs::free_matrix_array(divs, 1);
 
-    // ask the kernel group for the kernels we'll pick from for tuning
-    const boost::ptr_vector<Kernel>* kernels =
-        kernel_group.getTuningVector(divs->ptr(), num_train);
-    size_t num_kernels = kernels->size();
-
-    // want to keep track of the best kernel/C combos...keep all of them, to
-    // avoid biasing towards ones we see earlier when accuracies are equal.
-    typedef std::pair<size_t, size_t> config; // <kernel, C> indices
-    std::vector<config> best_configs;
-    size_t best_correct = 0;
-
-    if (num_kernels == 0) {
-        throw std::domain_error("no kernels in the kernel group");
-    } else if (num_kernels == 1 && c_vals.size() == 1) {
-        best_configs.push_back(config(0, 0));
-    } else {
-        // make a copy of divergences so we can mangle it
-        double *km = new double[num_train*num_train];
-
-        // used to store labels into during CV
-        double cv_labels[num_train];
-
-        for (size_t k = 0; k < num_kernels; k++) {
-            // turn into a kernel matrix
-            std::copy(divs[0].ptr(), divs[0].ptr() + num_train*num_train, km);
-            (*kernels)[k].transformDivergences(km, num_train);
-            project_to_symmetric_psd(km, num_train);
-
-            // is it a constant matrix or something else awful?
-            if (num_kernels != 1 && detail::terrible_kernel(km, num_train))
-                continue;
-
-            // store in the svm_problem
-            detail::store_kernel_matrix(*prob, km, false);
-
-            for (size_t ci = 0; ci < c_vals.size(); ci++) {
-                // do SVM cross-validation with these params
-                svm_p.C = c_vals[ci];
-                svm_cross_validation(prob, &svm_p, tuning_folds, cv_labels);
-
-                size_t num_correct = 0;
-                for (size_t i = 0; i < num_train; i++)
-                    if (cv_labels[i] == labels[i])
-                        num_correct++;
-
-                if (num_correct >= best_correct) {
-                    if (num_correct > best_correct) {
-                        best_configs.clear();
-                        best_correct = num_correct;
-                    }
-                    best_configs.push_back(std::make_pair(k, ci));
-                }
-            }
-        }
-
-        delete[] km;
-    }
-
-    // choose a kernel / C combo as the best one
-    const config &best_config = detail::pick_rand(best_configs);
-    const Kernel *kernel = new_clone((*kernels)[best_config.first]);
-    svm_p.C = c_vals[best_config.second];
-
-    delete kernels; // FIXME: potential leaks in here if something crashes
-
-    ////////////////////////////////////////////////////////////////////////////
-    // train final SVM on the whole thing
-
-    kernel->transformDivergences(divs[0].ptr(), num_train);
-    project_to_symmetric_psd(divs[0].ptr(), num_train);
-    detail::store_kernel_matrix(*prob, divs[0].ptr(), false);
-    npdivs::free_matrix_array(divs, 1); // don't need these anymore
-
+    // check svm parameters
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
         std::cerr << "LibSVM parameter error: " << error << std::endl;
         throw std::domain_error(error);
     }
+
+    // train away!
     svm_model *svm = svm_train(prob, &svm_p);
+
     SDM<Scalar>* sdm = new SDM<Scalar>(*svm, *prob, div_func, *kernel,
             div_params, svm_get_nr_class(svm), train_bags, num_train);
-    delete kernel;
+
+    delete kernel; // copied in the constructor
     return sdm;
 }
 
@@ -437,7 +521,160 @@ const {
     return pred_labels;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Cross-validation
 
+template <typename Scalar>
+double crossvalidate(
+    const flann::Matrix<Scalar> *bags, size_t num_bags,
+    const std::vector<int> &labels,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    size_t folds,
+    bool project_all_data,
+    const std::vector<double> &c_vals,
+    const svm_parameter &svm_params,
+    size_t tuning_folds)
+{
+    typedef flann::Matrix<Scalar> Matrix;
+
+    if (folds <= 1) {
+        throw std::domain_error((boost::format(
+                    "Can't cross-validate with %d folds...") % folds).str());
+    }
+
+    size_t num_train = (size_t) std::ceil(num_bags * (1. - 1. / folds));
+    size_t num_test  = (size_t) std::ceil(num_bags / folds);
+
+    Matrix *train_bags = new Matrix[num_train];
+    Matrix *test_bags  = new Matrix[num_test];
+    std::vector<int> train_labels;
+
+    size_t num_correct = 0;
+
+    // copy the svm params so we can change them
+    svm_parameter svm_p = svm_params;
+    svm_p.svm_type = C_SVC;
+    svm_p.kernel_type = PRECOMPUTED;
+
+    // make libSVM shut up  -  TODO real logging
+    svm_set_print_string_function(&detail::print_null);
+
+    // calculate the full matrix of divergences
+    flann::Matrix<double>* divs =
+        npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
+    np_divs(bags, num_bags, div_func, divs, div_params, false);
+
+    // ask for the list of kernels to choose from
+    const boost::ptr_vector<Kernel> *kernels =
+        kernel_group.getTuningVector(divs->ptr(), num_train);
+
+    for (size_t fold = 0; fold < folds; fold++) {
+        // testing is in [test_start, test_end)
+        size_t test_start = fold * num_test;
+        size_t test_end = std::min((fold + 1) * num_test, num_bags);
+        size_t this_num_test = test_end - test_start;
+        size_t this_num_train = num_bags - this_num_test;
+
+        // copy into training / testing data
+        for (size_t i = 0; i < test_start; i++)
+            train_bags[i] = bags[i];
+        for (size_t i = test_start; i < test_end; i++)
+            test_bags[i - test_start] = bags[i];
+        for (size_t i = test_end; i < num_bags; i++)
+            train_bags[i - this_num_test] = bags[i];
+
+        // set up training labels
+        train_labels.resize(this_num_train);
+        std::copy(labels.begin(), labels.begin() + test_start,
+                train_labels.begin());
+        std::copy(labels.begin() + test_end, labels.end(),
+                train_labels.begin() + test_start);
+
+        // tune the kernel parameters
+        double *train_km = new double[this_num_train * this_num_train];
+        double *test_km = new double[this_num_test * this_num_train];
+        detail::copy_from_full_to_split(divs[0].ptr(), train_km, test_km,
+                test_start, this_num_train, this_num_test);
+
+        const std::pair<size_t, size_t> &best_config =
+            detail::tune_params(train_km, this_num_train, train_labels,
+                    *kernels, c_vals, svm_p, folds);
+        const Kernel &kernel = (*kernels)[best_config.first];
+        svm_p.C = c_vals[best_config.second];
+
+        // project either the whole matrix or just the training
+
+        if (project_all_data) {
+            double *full_km = new double[num_bags * num_bags];
+            std::copy(divs[0].ptr(), divs[0].ptr() + num_bags * num_bags,
+                    full_km);
+
+            kernel.transformDivergences(full_km, num_bags);
+            project_to_symmetric_psd(full_km, num_bags);
+
+            detail::copy_from_full_to_split(full_km, train_km, test_km,
+                    test_start, this_num_train, this_num_test);
+
+            delete[] full_km;
+
+        } else {
+            detail::copy_from_full_to_split(divs[0].ptr(), train_km, test_km,
+                    test_start, this_num_train, this_num_test);
+
+            kernel.transformDivergences(train_km, this_num_train);
+            project_to_symmetric_psd(train_km, this_num_train);
+
+            kernel.transformDivergences(test_km, this_num_test, this_num_train);
+        }
+
+        // set up svm parameters
+        svm_problem prob;
+        prob.l = this_num_train;
+        prob.y = new double[this_num_train];
+        for (size_t i = 0; i < this_num_train; i++)
+            prob.y[i] = double(train_labels[i]);
+        detail::store_kernel_matrix(prob, train_km, true);
+
+        // check svm params
+        const char* error = svm_check_parameter(&prob, &svm_p);
+        if (error != NULL) {
+            std::cerr << "LibSVM parameter error: " << error << std::endl;
+            throw std::domain_error(error);
+        }
+
+        // train!
+        svm_model *svm = svm_train(&prob, &svm_p);
+        SDM<Scalar> sdm(*svm, prob, div_func, kernel, div_params,
+                svm_get_nr_class(svm), train_bags, this_num_train);
+
+        // predict!
+        const std::vector<int> &preds = sdm.predict(test_bags, this_num_test);
+
+        // how many did we get right?
+        for (size_t i = 0; i < this_num_test; i++)
+            if (preds[i] == labels[test_start + i])
+                num_correct++;
+
+        // clean up
+        delete[] train_km;
+        delete[] test_km;
+        for (size_t i = 0; i < this_num_train; i++)
+            delete[] prob.x[i];
+        delete[] prob.x;
+        delete[] prob.y;
+        delete svm;
+    }
+
+    // clean up
+    delete[] train_bags;
+    delete[] test_bags;
+    delete kernels;
+
+    // return accuracy
+    return double(num_correct) / double(num_bags);
+}
 
 } // end namespace
 

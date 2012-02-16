@@ -50,6 +50,7 @@
 
 #include <flann/flann.hpp>
 
+#include <np-divs/matrix_arrays.hpp>
 #include <np-divs/matrix_io.hpp>
 #include <np-divs/div-funcs/from_str.hpp>
 
@@ -76,6 +77,7 @@ struct ProgOpts : boost::noncopyable {
 
     size_t k;
     size_t num_threads;
+    size_t cv_folds;
     size_t tuning_folds;
     bool prob;
 
@@ -147,23 +149,25 @@ int main(int argc, char ** argv) {
                     ifs, num_train, train_labels);
         }
 
-        // load test
-        size_t num_test;
+        // load test bags, maybe
+        size_t num_test = 0;
         Matrix* test_bags;
         vector<string> test_labels;
 
-        if (opts.test_bags_file == "-") {
-            cout << "Enter testing distributions in CSV-like "
-                "format: an initial string label for each distribution, one "
-                "line with comma-separated floating-point values for each "
-                "point, one blank line between distributions, and an extra "
-                "blank line when done.\n";
-            test_bags = npdivs::labeled_matrices_from_csv(
-                    cin, num_test, test_labels);
-        } else {
-            ifstream ifs(opts.test_bags_file.c_str(), ifstream::in);
-            test_bags = npdivs::labeled_matrices_from_csv(
-                    ifs, num_test, test_labels);
+        if (opts.cv_folds ==  0) {
+            if (opts.test_bags_file == "-") {
+                cout << "Enter testing distributions in CSV-like "
+                    "format: an initial string label for each distribution, one "
+                    "line with comma-separated floating-point values for each "
+                    "point, one blank line between distributions, and an extra "
+                    "blank line when done.\n";
+                test_bags = npdivs::labeled_matrices_from_csv(
+                        cin, num_test, test_labels);
+            } else {
+                ifstream ifs(opts.test_bags_file.c_str(), ifstream::in);
+                test_bags = npdivs::labeled_matrices_from_csv(
+                        ifs, num_test, test_labels);
+            }
         }
 
         // convert labels into integers
@@ -209,48 +213,73 @@ int main(int argc, char ** argv) {
         svm_parameter svm_params(sdm::default_svm_params);
         svm_params.probability = (int) opts.prob;
 
-        // train the model
-        sdm::SDM<double>* model = train_sdm(
-                train_bags, num_train, train_labels_ints,
-                *opts.div_func, *opts.kernel_group, div_params,
-                sdm::default_c_vals, svm_params, opts.tuning_folds);
+        if (opts.cv_folds == 0) {
+            // train the model
+            sdm::SDM<double>* model = train_sdm(
+                    train_bags, num_train, train_labels_ints,
+                    *opts.div_func, *opts.kernel_group, div_params,
+                    sdm::default_c_vals, svm_params, opts.tuning_folds);
 
-        // predict on test data
-        const std::vector<int> &preds = model->predict(test_bags, num_test);
+            // predict on test data
+            const std::vector<int> &preds = model->predict(test_bags, num_test);
 
-        // output predictions // TODO: optionally into file?
-        cout << "Predicted labels:\n";
-        for (size_t i = 0; i < num_test; i++) {
-            cout << i << ":\t" << labels_to_string[preds[i]];
-            if (test_labels_ints[i] != -1) {
-                if (test_labels_ints[i] == preds[i]) {
-                    cout << "\t -- correct";
-                } else {
+            // output predictions // TODO: optionally into file?
+            cout << "Predicted labels:\n";
+            for (size_t i = 0; i < num_test; i++) {
+                cout << i << ":\t" << labels_to_string[preds[i]];
+                if (test_labels_ints[i] != -1)
                     cout << "\t -- expected " << test_labels[i];
+                cout << endl;
+            }
+
+            // output predictions // TODO: optionally into file?
+            cout << "Predicted labels:\n";
+            for (size_t i = 0; i < num_test; i++) {
+                cout << i << ":\t" << labels_to_string[preds[i]];
+                if (test_labels_ints[i] != -1) {
+                    if (test_labels_ints[i] == preds[i]) {
+                        cout << "\t -- correct";
+                    } else {
+                        cout << "\t -- expected " << test_labels[i];
+                    }
+                }
+                cout << endl;
+            }
+
+            // test accuracy, if available
+            size_t num_correct = 0;
+            size_t total = num_test;
+            for (size_t i = 0; i < num_test; i++) {
+                if (test_labels_ints[i] == -1) {
+                    total--;
+                } else if (preds[i] == test_labels_ints[i]) {
+                    num_correct++;
                 }
             }
-            cout << endl;
-        }
+            if (total > 0) {
+                cout << "Accuracy on " << total << " labeled test points: "
+                    << num_correct * 100. / total << "%\n";
+            }
 
-        // test accuracy, if available
-        size_t num_correct = 0;
-        size_t total = num_test;
-        for (size_t i = 0; i < num_test; i++) {
-            if (test_labels_ints[i] == -1) {
-                total--;
-            } else if (preds[i] == test_labels_ints[i]) {
-                num_correct++;
+            // cleanup
+            model->destroyModelAndProb();
+            delete model;
+        } else {
+            // TODO: optionally project all the data beforehand?
+            // TODO: actually, this should be a general-use SDM method that
+            //       we just call from here...
+            for (size_t cv = 0; cv < opts.cv_folds; cv++) {
+                // do test/train split
+
+                // train the model
+
+                // predict on test data
             }
         }
-        if (total > 0) {
-            cout << "Accuracy on " << total << " labeled test points: "
-                << num_correct * 100. / total << "%\n";
-        }
 
-        // clean up
-        model->destroyModelAndProb();
-        delete model;
-        delete[] train_bags;
+        // cleanup
+        npdivs::free_matrix_array(train_bags, num_train);
+        npdivs::free_matrix_array(test_bags, num_test);
 
     } catch (std::exception &e) {
         cerr << "Error: " << e.what() << endl;
@@ -274,6 +303,10 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             "- means stdin. "
             "Use a blank line or ? as the label if it's not known. If any "
             "test distributions are labeled, will report accuracy on them.")
+        ("cv-folds,c",
+            po::value<size_t>(&opts.cv_folds)->default_value(0),
+            "Do c-fold cross-validation on the data passed in --train-bags. "
+            "Invalid to pass along with --test-bags.")
         ("div-func,d",
             po::value<string>()->default_value("l2")->notifier(
                 boost::bind(&ProgOpts::parse_div_func, boost::ref(opts), _1)),
@@ -328,6 +361,11 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
         }
 
         po::notify(vm);
+
+        if (opts.cv_folds != 0 && opts.test_bags_file != "-") {
+            cerr << "Error: can't do cross-validation and have test data\n";
+            return false;
+        }
     } catch (std::exception &e) {
         cerr << "Error: " << e.what() << endl;
         return false;

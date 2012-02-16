@@ -65,6 +65,86 @@ TEST(UtilitiesTest, CovarianceProjection) {
         EXPECT_NEAR(mat[i], kernel[i], 1e-4) << "i = " << i;
 }
 
+TEST(UtilitiesTest, CVSplitter) {
+    double m[8*8] = {
+          1,  2,  3,  4,  5,  6,  7,  8,
+         11, 12, 13, 14, 15, 16, 17, 18,
+         21, 22, 23, 24, 25, 26, 27, 28,
+         31, 32, 33, 34, 35, 36, 37, 38,
+         41, 42, 43, 44, 45, 46, 47, 48,
+         51, 52, 53, 54, 55, 56, 57, 58,
+         61, 62, 63, 64, 65, 66, 67, 68,
+         71, 72, 73, 74, 75, 76, 77, 78
+    };
+
+    double train[6*6];
+    double test[2*6];
+
+
+    detail::copy_from_full_to_split(m, train, test, 0, 6, 2);
+    double exp_train_1[6*6] = {
+        23, 24, 25, 26, 27, 28,
+        33, 34, 35, 36, 37, 38,
+        43, 44, 45, 46, 47, 48,
+        53, 54, 55, 56, 57, 58,
+        63, 64, 65, 66, 67, 68,
+        73, 74, 75, 76, 77, 78
+    };
+    double exp_test_1[2*6] = {
+         3,  4,  5,  6,  7,  8,
+        13, 14, 15, 16, 17, 18
+    };
+    for (size_t i = 0; i < 6; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_train_1[i*6 + j], train[i*6 + j]);
+    for (size_t i = 0; i < 2; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_test_1[i*6 + j], test[i*6 + j]);
+
+
+    detail::copy_from_full_to_split(m, train, test, 2, 6, 2);
+    double exp_train_2[6*6] = {
+         1,  2,  5,  6,  7,  8,
+        11, 12, 15, 16, 17, 18,
+        41, 42, 45, 46, 47, 48,
+        51, 52, 55, 56, 57, 58,
+        61, 62, 65, 66, 67, 68,
+        71, 72, 75, 76, 77, 78
+    };
+    double exp_test_2[2*6] = {
+        21, 22, 25, 26, 27, 28,
+        31, 32, 35, 36, 37, 38
+    };
+    for (size_t i = 0; i < 6; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_train_2[i*6 + j], train[i*6 + j]);
+    for (size_t i = 0; i < 2; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_test_2[i*6 + j], test[i*6 + j]);
+
+
+    detail::copy_from_full_to_split(m, train, test, 6, 6, 2);
+    double exp_train_3[6*6] = {
+         1,  2,  3,  4,  5,  6,
+        11, 12, 13, 14, 15, 16,
+        21, 22, 23, 24, 25, 26,
+        31, 32, 33, 34, 35, 36,
+        41, 42, 43, 44, 45, 46,
+        51, 52, 53, 54, 55, 56,
+    };
+    double exp_test_3[2*6] = {
+        61, 62, 63, 64, 65, 66,
+        71, 72, 73, 74, 75, 76
+    };
+    for (size_t i = 0; i < 6; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_train_3[i*6 + j], train[i*6 + j]);
+    for (size_t i = 0; i < 2; i++)
+        for (size_t j = 0; j < 6; j++)
+            EXPECT_EQ(exp_test_3[i*6 + j], test[i*6 + j]);
+
+}
+
 #define NUM_TRAIN 10
 #define TRAIN_SIZE 10
 #define NUM_TEST 4
@@ -163,7 +243,7 @@ class EasySmallSDMTest : public ::testing::Test {
     vector< vector<double> > testTrainTest(
             const npdivs::DivFunc &div_func,
             const KernelGroup &kernel_group,
-            vector<double> cs = default_c_vals,
+            const vector<double> &cs = default_c_vals,
             size_t tuning_folds = NUM_TRAIN)
     {
         // train up the model
@@ -186,6 +266,17 @@ class EasySmallSDMTest : public ::testing::Test {
         return vals;
     }
 
+    double testCV(
+            size_t folds,
+            const npdivs::DivFunc &div_func,
+            const KernelGroup &kernel_group,
+            const vector<double> &cs = default_c_vals,
+            size_t tuning_folds = 3,
+            bool project_all = true)
+    {
+        return crossvalidate(train, num_train, labels, div_func, kernel_group,
+                div_params, folds, project_all, cs, svm_params, tuning_folds);
+    }
 
 };
 
@@ -224,6 +315,28 @@ TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
 
     const vector< vector<double> > &vals =
         testTrainTest(div_func, kernel_group);
+}
+
+TEST_F(EasySmallSDMTest, CVPoly) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group);
+    EXPECT_GT(acc, .7);
+}
+
+TEST_F(EasySmallSDMTest, CVRenyi) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group);
+    EXPECT_GT(acc, .7);
 }
 
 } // end namespace
