@@ -227,38 +227,27 @@ int main(int argc, char ** argv) {
             const std::vector<int> &preds = model->predict(test_bags, num_test);
 
             // output predictions // TODO: optionally into file?
-            cout << "Predicted labels:\n";
-            for (size_t i = 0; i < num_test; i++) {
-                cout << i << ":\t" << labels_to_string[preds[i]];
-                if (test_labels_ints[i] != -1)
-                    cout << "\t -- expected " << test_labels[i];
-                cout << endl;
-            }
+            // tally up accuracy at the same time
+            size_t num_correct = 0;
+            size_t total = num_test;
 
-            // output predictions // TODO: optionally into file?
             cout << "Predicted labels:\n";
             for (size_t i = 0; i < num_test; i++) {
                 cout << i << ":\t" << labels_to_string[preds[i]];
-                if (test_labels_ints[i] != -1) {
+                if (test_labels_ints[i] == -1) {
+                    total--;
+                } else {
                     if (test_labels_ints[i] == preds[i]) {
                         cout << "\t -- correct";
+                        num_correct++;
                     } else {
                         cout << "\t -- expected " << test_labels[i];
                     }
                 }
                 cout << endl;
             }
+            cout << endl;
 
-            // test accuracy, if available
-            size_t num_correct = 0;
-            size_t total = num_test;
-            for (size_t i = 0; i < num_test; i++) {
-                if (test_labels_ints[i] == -1) {
-                    total--;
-                } else if (preds[i] == test_labels_ints[i]) {
-                    num_correct++;
-                }
-            }
             if (total > 0) {
                 cout << "Accuracy on " << total << " labeled test points: "
                     << num_correct * 100. / total << "%\n";
