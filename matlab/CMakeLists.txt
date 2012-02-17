@@ -57,7 +57,9 @@ if (MEX_CMD AND MEXEXT_CMD)
         set(MEX_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp")
 
         # -L args
-        foreach(i ${PROJECT_BINARY_DIR}/sdm ${NPDIVS_LIBRARY_DIRS})
+        foreach(i ${PROJECT_BINARY_DIR}/sdm
+                  ${NPDIVS_LIBRARY_DIRS}
+                  ${FLANN_LIBRARY_DIRS})
             list(APPEND MEX_ARGS "-L${i}")
         endforeach(i)
 
