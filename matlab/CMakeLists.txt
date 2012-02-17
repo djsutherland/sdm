@@ -71,8 +71,6 @@ if (MEX_CMD AND MEXEXT_CMD)
         foreach(i sdm_s
                 ${NPDIVS_LIBRARIES}
                 ${FLANN_LIBRARIES}
-                mwlapack # XXX this is a hacky workaround because Accelerate
-                mwblas   # is a framework on OSX. might cause problems.
                 )
             list(APPEND MEX_ARGS "-l${i}")
         endforeach(i)
@@ -82,7 +80,11 @@ if (MEX_CMD AND MEXEXT_CMD)
             ${Boost_THREAD_STATIC_LIBRARY}
             ${LIBSVM_LIBRARIES}
             ${CMAKE_THREAD_LIBS_INIT})
+
         # TODO: get LAPACK_LIBRARIES, BLAS_LIBRARIES in there for linux
+        list(APPEND MEX_ARGS
+            \"CXXLIBS=\\$$CXXLIBS -framework Accelerate\"
+        )
 
         add_custom_command(
             OUTPUT ${MEX_FILE}
