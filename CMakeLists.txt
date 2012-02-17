@@ -9,6 +9,7 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 option(EXE_LINK_SHARED
     "Link the executable to the shared library, rather than the static." ON)
+option(BUILD_MATLAB_BINDINGS "Build the MEX interface for use with MATLAB." ON)
 
 # version info
 set(SDM_MAJOR_VERSION 0)
@@ -44,22 +45,18 @@ include_directories(BEFORE ${PROJECT_SOURCE_DIR})
 
 find_package(NPDivs REQUIRED)
 include_directories(${NPDIVS_INCLUDE_DIRS})
-link_directories(${NPDIVS_LIBRARY_DIRS})
 
 find_package(LibSVM REQUIRED)
 include_directories(${LIBSVM_INCLUDE_DIRS})
-link_directories(${LIBSVM_LIBRARY_DIRS})
 
 find_package(Threads)
 
 find_package(Boost COMPONENTS thread program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
-link_directories(${Boost_LIBRARY_DIRS})
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FLANN REQUIRED flann)
 include_directories(${FLANN_INCLUDE_DIRS})
-link_directories(${FLANN_LIBRARY_DIRS})
 if(FLANN_CFLAGS)
     add_definitions(${FLANN_CFLAGS})
 endif(FLANN_CFLAGS)
@@ -69,15 +66,17 @@ enable_language(Fortran)
 
 find_package(BLAS REQUIRED)
 include_directories(${BLAS_INCLUDE_DIRS})
-link_directories(${BLAS_LIBRARY_DIRS})
 
 find_package(LAPACK REQUIRED)
 include_directories(${LAPACK_INCLUDE_DIRS})
-link_directories(${LAPACK_LIBRARY_DIRS})
 
 # subdirectories with actual content
 add_subdirectory(sdm)
 add_subdirectory(test)
+if(BUILD_MATLAB_BINDINGS)
+    add_subdirectory(matlab)
+endif()
+
 
 ################################################################################
 ## stuff for making SDMConfig.cmake
