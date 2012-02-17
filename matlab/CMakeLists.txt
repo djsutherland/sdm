@@ -68,10 +68,7 @@ if (MEX_CMD AND MEXEXT_CMD)
         endforeach(i)
 
         # -l args
-        foreach(i sdm_s
-                ${NPDIVS_LIBRARIES}
-                ${FLANN_LIBRARIES}
-                )
+        foreach(i sdm_s ${NPDIVS_LIBRARIES} ${FLANN_LIBRARIES})
             list(APPEND MEX_ARGS "-l${i}")
         endforeach(i)
 
@@ -81,10 +78,16 @@ if (MEX_CMD AND MEXEXT_CMD)
             ${LIBSVM_LIBRARIES}
             ${CMAKE_THREAD_LIBS_INIT})
 
-        # TODO: get LAPACK_LIBRARIES, BLAS_LIBRARIES in there for linux
-        list(APPEND MEX_ARGS
-            \"CXXLIBS=\\$$CXXLIBS -framework Accelerate\"
-        )
+        # lapack/blas needs trickery to make mex happy on mac
+        if(${APPLE})
+            list(APPEND MEX_ARGS
+                \"CXXLIBS=\\$$CXXLIBS -framework Accelerate\"
+            )
+        else()
+            foreach(i sdm_s ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
+                list(APPEND MEX_ARGS "-l${i}")
+            endforeach(i)
+        endif()
 
         add_custom_command(
             OUTPUT ${MEX_FILE}
