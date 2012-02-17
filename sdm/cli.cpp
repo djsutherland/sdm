@@ -209,7 +209,7 @@ int main(int argc, char ** argv) {
 
         // div params
         npdivs::DivParams div_params(opts.k,
-                *opts.index_params, *opts.search_params,
+                opts.index_params, opts.search_params,
                 opts.num_threads);
 
         // svm params

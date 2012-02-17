@@ -165,7 +165,7 @@ namespace detail {
 
     // don't actually print the argument
     // TODO: real logging
-    void print_null(const char *s) {}
+    void print_null(const char *s);
 
     // see whether a kernel is just so horrendous we shouldn't bother
     bool terrible_kernel(double* km, size_t n, double const_thresh=1e-4);

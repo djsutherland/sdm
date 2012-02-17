@@ -90,6 +90,8 @@ namespace detail {
         }
     }
 
+    void print_null(const char *s) {}
+
     // see whether a kernel is just so horrendous we shouldn't bother
     bool terrible_kernel(double* km, size_t n, double const_thresh) {
         const double l = n*n;
