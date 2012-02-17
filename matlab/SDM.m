@@ -43,9 +43,10 @@ classdef SDM < handle
     end
 
     methods
-        % TODO: constructor?
-        function this = SDM()
-            this.cpp_handle = sdm('create');
+        % constructor...add a way to copy?
+        % TODO: should probably be private
+        function this = SDM(cpp_handle)
+            this.cpp_handle = cpp_handle;
         end
 
         % TODO: destructor
@@ -100,7 +101,8 @@ classdef SDM < handle
             % TODO: parameter checking
 
             if nargin < 3; options = struct(); end
-            model = sdm('train', train_bags, labels, options);
+            model_handle = sdm('train', train_bags, labels, options);
+            model = SDM(model_handle);
         end
 
         % TODO: do cross-validation on a dataset
