@@ -61,6 +61,8 @@ void symmetrize(double* matrix, size_t n) {
 // LAPACK: computes the eigenvalues/vectors of a square symmetric dense matrix
 extern "C" void dsyev_(char *jobz, char *uplo, int *n, double *a,
         int *lda, double *w, double *work, int *lwork, int *info);
+// FIXME: figure out how to support ILP64 lapacks, so that matlab interface
+//  works on linux without LD_PRELOAD
 
 /* Takes an n x n symmetric matrix and computes its eigendecomposition.
  *
