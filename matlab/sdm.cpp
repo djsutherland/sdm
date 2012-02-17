@@ -230,13 +230,13 @@ bool get_bool(const mxArray *thing, const char* err_msg) {
 
 
 template <typename T, typename K>
-vector<K> _convert(void* data_void, mwSize n) {
+vector<K> _convert(const void* data_void, mwSize n) {
     vector<K> vec;
     vec.reserve(n);
 
     T* data = (T*) data_void;
     for (mwSize i = 0; i < n; i++) {
-        vec.push_back(data[i]);
+        vec.push_back((K) data[i]);
     }
     return vec;
 }
@@ -248,7 +248,7 @@ vector<K> get_vector(const mxArray *thing, const char* err_msg) {
         mexErrMsgTxt(err_msg);
 
     mwSize n = mxGetNumberOfElements(thing);
-    void* data = mxGetData(thing);
+    const void* data = mxGetData(thing);
 
     // switch on the input type, since we can only get a void*
     // ...thanks for being the worst, mex
