@@ -51,11 +51,11 @@ classdef SDM < handle
 
         % TODO: destructor
         function delete(this)
-            sdm('delete', this.cpp_handle);
+            sdm_mex('delete', this.cpp_handle);
         end
 
         function [name] = name(this)
-            name = sdm('name', this.cpp_handle);
+            name = sdm_mex('name', this.cpp_handle);
         end
 
         % TODO: predict on new data
@@ -105,7 +105,7 @@ classdef SDM < handle
             % TODO: parameter checking
 
             if nargin < 3; options = struct(); end
-            model_handle = sdm('train', train_bags, labels, options);
+            model_handle = sdm_mex('train', train_bags, labels, options);
             model = SDM(model_handle);
         end
 

@@ -25,7 +25,7 @@
 # TODO: support octave
 # TODO: support manually setting paths to mex/mexext
 
-set(MEX_NAME sdm)
+set(MEX_NAME sdm_mex)
 
 if(WIN32)
     find_program(MEX_CMD mex.bat)
@@ -97,7 +97,7 @@ if (MEX_CMD AND MEXEXT_CMD)
             DEPENDS sdm_s ${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp
             COMMENT "Building MEX extension ${MEX_FILE}"
         )
-        add_custom_target(${MEX_NAME}_mex ALL DEPENDS ${MEX_FILE})
+        add_custom_target(sdm-mex ALL DEPENDS ${MEX_FILE})
         # TODO: export target?
 
         file(GLOB MATLAB_SOURCES *.m)
