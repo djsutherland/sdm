@@ -421,6 +421,13 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
         destroy(convertMat2Ptr<SDMF>(prhs[1])->getPointer());
 
+    } else if (op == "name") {
+        if (nrhs != 2) mexErrMsgTxt("name takes exactly one argument");
+        if (nlhs != 1) mexErrMsgTxt("name returns exactly 1 output");
+
+        SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
+        plhs[0] = mxCreateString(model->name().c_str());
+
     } else if (op == "train") {
         if (nrhs != 4) mexErrMsgTxt("train needs exactly three arguments");
         if (nlhs != 1) mexErrMsgTxt("train returns exactly 1 output");

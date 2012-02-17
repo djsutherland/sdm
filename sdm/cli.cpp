@@ -223,6 +223,8 @@ int main(int argc, char ** argv) {
                     *opts.div_func, *opts.kernel_group, div_params,
                     sdm::default_c_vals, svm_params, opts.tuning_folds);
 
+            cout << "Trained model: " << model->name() << endl;
+
             // predict on test data
             const std::vector<int> &preds = model->predict(test_bags, num_test);
 

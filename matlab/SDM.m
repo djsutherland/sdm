@@ -54,8 +54,12 @@ classdef SDM < handle
             sdm('delete', this.cpp_handle);
         end
 
+        function [name] = name(this)
+            name = sdm('name', this.cpp_handle);
+        end
+
         % TODO: predict on new data
-        function [labels vals] = predict(sdm)
+        function [labels vals] = predict(this)
         end
     end
 

@@ -83,6 +83,12 @@ class SDM {
 
         void destroyModelAndProb();
 
+        const Kernel *getKernel() const { return kernel; }
+        const npdivs::DivFunc *getDivFunc() const { return div_func; }
+        const svm_model *getSVM() const { return &svm; }
+        const size_t getNumClasses() const { return num_classes; }
+        std::string name() const;
+
         int predict(const flann::Matrix<Scalar> &test_bag) const;
         int predict(const flann::Matrix<Scalar> &test_bag,
                 std::vector<double> &vals) const;
