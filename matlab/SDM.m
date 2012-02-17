@@ -45,7 +45,7 @@ classdef SDM < handle
     methods
         % TODO: constructor?
         function this = SDM()
-            this.cpp_handle = sdm('create')
+            this.cpp_handle = sdm('create');
         end
 
         % TODO: destructor
@@ -100,7 +100,7 @@ classdef SDM < handle
             % TODO: parameter checking
 
             if nargin < 3; options = struct(); end
-            model = sdm('train', train_bags, labels, options)
+            model = sdm('train', train_bags, labels, options);
         end
 
         % TODO: do cross-validation on a dataset
