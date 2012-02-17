@@ -56,26 +56,27 @@ if (MEX_CMD AND MEXEXT_CMD)
 
         set(MEX_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp")
 
-        # -L args
-        foreach(i ${PROJECT_BINARY_DIR}/sdm
-                  ${NPDIVS_LIBRARY_DIRS}
-                  ${FLANN_LIBRARY_DIRS})
-            list(APPEND MEX_ARGS "-L${i}")
-        endforeach(i)
-
         # -I args
         foreach(i ${PROJECT_SOURCE_DIR} ${NPDIVS_INCLUDE_DIRS}
                 ${BOOST_INCLUDE_DIRS})
             list(APPEND MEX_ARGS "-I${i}")
         endforeach(i)
 
+        # -L args
+        foreach(i ${NPDIVS_LIBRARY_DIRS}
+                  ${FLANN_LIBRARY_DIRS})
+            list(APPEND MEX_ARGS "-L${i}")
+        endforeach(i)
+
         # -l args
-        foreach(i sdm_s ${NPDIVS_LIBRARIES} ${FLANN_LIBRARIES})
+        foreach(i ${NPDIVS_LIBRARIES} ${FLANN_LIBRARIES})
             list(APPEND MEX_ARGS "-l${i}")
         endforeach(i)
 
         # direct arguments
+        get_property(sdm_s_location TARGET sdm_s PROPERTY LOCATION)
         list(APPEND MEX_ARGS
+            ${sdm_s_location}
             ${Boost_THREAD_STATIC_LIBRARY}
             ${LIBSVM_LIBRARIES}
             ${CMAKE_THREAD_LIBS_INIT})
@@ -83,11 +84,10 @@ if (MEX_CMD AND MEXEXT_CMD)
         # lapack/blas needs trickery to make mex happy on mac
         if(${APPLE})
             list(APPEND MEX_ARGS
-                \"CXXLIBS=\\$$CXXLIBS -framework Accelerate\"
-            )
+                \"CXXLIBS=\\$$CXXLIBS -framework Accelerate\")
         else()
-            foreach(i sdm_s ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
-                list(APPEND MEX_ARGS "-l${i}")
+            foreach(i ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
+                list(APPEND MEX_ARGS "${i}")
             endforeach(i)
         endif()
 
@@ -106,7 +106,7 @@ if (MEX_CMD AND MEXEXT_CMD)
         )
 
     else()
-        message(WARNING "The 'mex' and 'mexext' programs have been found in different locations; something is probably wrong. (Is 'mex' the pdftex alias?) Make sure MATLAB's 'bin' directory is in your PATH.")
+        message(WARNING "The 'mex' and 'mexext' programs have been found in different locations; something is probably wrong. (Is 'mex' the pdftex alias?) Make sure MATLAB's 'bin' directory is in your PATH.\n${MEX_REAL_CMD}\n${MEXEXT_REAL_CMD}")
         set(BUILD_MATLAB_BINDINGS OFF)
     endif()
 
