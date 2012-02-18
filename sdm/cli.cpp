@@ -82,8 +82,8 @@ struct ProgOpts : boost::noncopyable {
     bool prob;
     bool proj_indiv;
 
-    flann::IndexParams * index_params;
-    flann::SearchParams * search_params;
+    flann::IndexParams index_params;
+    flann::SearchParams search_params;
 
     void parse_div_func(const string spec) {
         div_func = npdivs::div_func_from_str(spec);
@@ -106,10 +106,12 @@ struct ProgOpts : boost::noncopyable {
     void parse_index(const string name) {
         // TODO: more index types, support arguments
         if (name == "linear" || name == "brute") {
-            index_params = new flann::LinearIndexParams;
+            flann::LinearIndexParams ps;
+            index_params = ps;
 
         } else if (name == "kdtree" || name == "kd") {
-            index_params = new flann::KDTreeSingleIndexParams;
+            flann::KDTreeSingleIndexParams ps;
+            index_params = ps;
 
         } else {
             throw std::domain_error((
@@ -362,7 +364,7 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
         return false;
     }
 
-    opts.search_params = new flann::SearchParams(64);
+    opts.search_params = flann::SearchParams(64);
 
     return true;
 }

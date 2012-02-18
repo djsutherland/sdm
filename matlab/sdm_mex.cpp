@@ -368,11 +368,14 @@ SDM<Scalar> * train(
         mexErrMsgTxt(("unkown kernel type: " + opts.kernel).c_str());
     }
 
-    flann::IndexParams * index_params;
+    // even though this looks like object slicing, it's not, i promise
+    flann::IndexParams index_params;
     if (opts.index_type == "linear" || opts.index_type == "brute") {
-        index_params = new flann::LinearIndexParams;
+        flann::LinearIndexParams ps;
+        index_params = ps;
     } else if (opts.index_type == "kdtree" || opts.index_type == "kd") {
-        index_params = new flann::KDTreeSingleIndexParams;
+        flann::KDTreeSingleIndexParams ps;
+        index_params = ps;
     } else {
         mexErrMsgTxt(("unknown index type: " + opts.index_type).c_str());
     }
@@ -380,7 +383,7 @@ SDM<Scalar> * train(
     flann::SearchParams search_params(-1);
 
     npdivs::DivParams div_params(
-            opts.k, index_params, &search_params, opts.num_threads);
+            opts.k, index_params, search_params, opts.num_threads);
 
     svm_parameter svm_params = sdm::default_svm_params;
     svm_params.probability = (int) opts.probability;
@@ -394,7 +397,6 @@ SDM<Scalar> * train(
     // cleanup
     delete kernel_group;
     delete div_func;
-    delete index_params;
 
     return model;
 }
