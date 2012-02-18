@@ -37,6 +37,10 @@
 %   http://www.mathworks.com/matlabcentral/newsreader/view_thread/278243
 
 
+% TODO: segfault when run with   echo some matlab commands | matlab -nojvm
+% TODO: link mex file as statically as possible
+% TODO: add warnings about possibly having to use LD_PRELOAD
+
 classdef SDM < handle
     properties (Hidden = true, SetAccess = private)
         cpp_handle;
