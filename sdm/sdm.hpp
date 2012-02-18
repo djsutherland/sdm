@@ -73,7 +73,7 @@ class SDM {
             const flann::Matrix<Scalar> *train_bags, size_t num_train)
         :
             svm(svm), svm_prob(svm_prob),
-            kernel(new_clone(kernel)), div_func(new_clone(div_func)),
+            div_func(new_clone(div_func)), kernel(new_clone(kernel)),
             div_params(div_params), num_classes(num_classes),
             train_bags(train_bags), num_train(num_train)
         { }
@@ -197,7 +197,10 @@ SDM<Scalar> * train_sdm(
     size_t tuning_folds = 3);
 
 
-// Function to do cross-validation on
+// Function to do cross-validation on the passed distributions.
+//
+// The project_all_data parameter specifies whether to project the entire
+// kernel matrix to PSD, or only the training data for a given fold.
 template <typename Scalar>
 double crossvalidate(
     const flann::Matrix<Scalar> *bags, size_t num_bags,

@@ -61,6 +61,8 @@ typedef flann::Matrix<double> MatrixD;
 using std::string;
 using std::vector;
 
+using npdivs::DivParams;
+
 using sdm::SDM;
 typedef SDM<float> SDMF;
 
@@ -382,6 +384,83 @@ struct TrainingOptions {
         div_func("l2"), kernel("gaussian"), k(3), tuning_folds(3),
         probability(false), num_threads(0), index_type("kdtree")
     {}
+
+    void parseOpt(string name, mxArray* val) {
+        if (name == "div_func") {
+            div_func = get_string(val, "div_func must be a string");
+
+        } else if (name == "kernel") {
+            kernel = get_string(val, "kernel must be a string");
+
+        } else if (name == "k") {
+            k = get_size_t(val, "k must be a positive integer");
+            if (k < 1)
+                mexErrMsgTxt("k must be a positive integer");
+
+        } else if (name == "tuning_folds") {
+            tuning_folds = get_size_t(val,
+                            "tuning_folds must be a positive integer");
+            if (tuning_folds < 2)
+                mexErrMsgTxt("tuning_folds must be at least 2");
+
+        } else if (name == "probability") {
+            probability = get_bool(val, "probability must be boolean");
+
+        } else if (name == "num_threads") {
+            num_threads = get_size_t(val,
+                    "num_threads must be a nonnegative integer");
+
+        } else if (name == "index") {
+            index_type = get_string(val, "index must be a string");
+
+        } else {
+            mexErrMsgTxt(("unknown training option: " + name).c_str());
+        }
+    }
+
+    npdivs::DivFunc* getDivFunc() const {
+        return npdivs::div_func_from_str(div_func);
+    }
+
+    sdm::KernelGroup* getKernelGroup() const {
+        if (kernel == "gaussian") {
+            return new sdm::GaussianKernelGroup;
+        } else if (kernel == "linear") {
+            return new sdm::LinearKernelGroup;
+        } else if (kernel == "polynomial") {
+            return new sdm::PolynomialKernelGroup;
+        } else {
+            mexErrMsgTxt(("unkown kernel type: " + kernel).c_str());
+        }
+    }
+
+    // even though this looks like object slicing, it's not, i promise
+    flann::IndexParams getIndexParams() const {
+        if (index_type == "linear" || index_type == "brute") {
+            flann::LinearIndexParams ps;
+            return ps;
+        } else if (index_type == "kdtree" || index_type == "kd") {
+            flann::KDTreeSingleIndexParams ps;
+            return ps;
+        } else {
+            mexErrMsgTxt(("unknown index type: " + index_type).c_str());
+        }
+    }
+
+    svm_parameter getSVMParams() const {
+        svm_parameter svm_params = sdm::default_svm_params;
+        svm_params.probability = (int) probability;
+        return svm_params;
+    }
+
+    DivParams getDivParams() const {
+        flann::SearchParams search_params(-1);
+        return DivParams(k, getIndexParams(), search_params, num_threads);
+    }
+
+    vector<double> getCvals() const {
+        return sdm::default_c_vals;
+    }
 };
 
 template <typename Scalar>
@@ -408,83 +487,27 @@ SDM<Scalar> * train(
 
     TrainingOptions opts;
     for (mwSize i = 0; i < nfields; i++) {
-        const char* name_ = mxGetFieldNameByNumber(opts_m, i);
-        std::string name(name_);
-        mxArray* val = mxGetFieldByNumber(opts_m, 0, i);
-
-        if (name == "div_func") {
-            opts.div_func = get_string(val, "div_func must be a string");
-
-        } else if (name == "kernel") {
-            opts.kernel = get_string(val, "kernel must be a string");
-
-        } else if (name == "k") {
-            opts.k = get_size_t(val, "k must be a positive integer");
-            if (opts.k < 1)
-                mexErrMsgTxt("k must be a positive integer");
-
-        } else if (name == "tuning_folds") {
-            opts.tuning_folds = get_size_t(val,
-                    "tuning_folds must be a positive integer");
-            if (opts.tuning_folds < 2)
-                mexErrMsgTxt("tuning_folds must be at least 2");
-
-        } else if (name == "probability") {
-            opts.probability = get_bool(val, "probability must be boolean");
-
-        } else if (name == "num_threads") {
-            opts.num_threads = get_size_t(val,
-                    "num_threads must be a nonnegative integer");
-
-        } else if (name == "index") {
-            opts.index_type = get_string(val, "index must be a string");
-
-        } else {
-            mexErrMsgTxt(("unknown training option: " + name).c_str());
-        }
+        opts.parseOpt(
+                string(mxGetFieldNameByNumber(opts_m, i)),
+                mxGetFieldByNumber(opts_m, 0, i));
     }
 
-    // build up the actual parameters we need based on opts
-    npdivs::DivFunc* div_func = npdivs::div_func_from_str(opts.div_func);
+    npdivs::DivFunc* div_func = opts.getDivFunc();
+    sdm::KernelGroup* kernel_group = opts.getKernelGroup();
 
-    sdm::KernelGroup* kernel_group;
-    if (opts.kernel == "gaussian") {
-        kernel_group = new sdm::GaussianKernelGroup;
-    } else if (opts.kernel == "linear") {
-        kernel_group = new sdm::LinearKernelGroup;
-    } else if (opts.kernel == "polynomial") {
-        kernel_group = new sdm::PolynomialKernelGroup;
-    } else {
-        mexErrMsgTxt(("unkown kernel type: " + opts.kernel).c_str());
-    }
+    SDMF *model;
 
-    // even though this looks like object slicing, it's not, i promise
-    flann::IndexParams index_params;
-    if (opts.index_type == "linear" || opts.index_type == "brute") {
-        flann::LinearIndexParams ps;
-        index_params = ps;
-    } else if (opts.index_type == "kdtree" || opts.index_type == "kd") {
-        flann::KDTreeSingleIndexParams ps;
-        index_params = ps;
-    } else {
-        mexErrMsgTxt(("unknown index type: " + opts.index_type).c_str());
-    }
+    try {
+        // train away!
+        model = sdm::train_sdm<Scalar>(
+                bags, num_train, labels,
+                *div_func, *kernel_group,
+                opts.getDivParams(),
+                opts.getCvals(),
+                opts.getSVMParams(),
+                opts.tuning_folds);
 
-    flann::SearchParams search_params(-1);
-
-    npdivs::DivParams div_params(
-            opts.k, index_params, search_params, opts.num_threads);
-
-    svm_parameter svm_params = sdm::default_svm_params;
-    svm_params.probability = (int) opts.probability;
-
-
-    // train away!
-    SDMF *model = sdm::train_sdm<float>(bags, num_train, labels, *div_func,
-            *kernel_group, div_params, sdm::default_c_vals,
-            svm_params, opts.tuning_folds);
-
-    // cleanup
+    } catch (...) { delete kernel_group; delete div_func; throw; }
     delete kernel_group;
     delete div_func;
 
@@ -494,9 +517,87 @@ SDM<Scalar> * train(
 ////////////////////////////////////////////////////////////////////////////////
 // Cross-validation
 
+struct CrossValidationOptions : public TrainingOptions {
+    typedef TrainingOptions super;
 
-////////////////////////////////////////////////////////////////////////////////
-// Prediction
+    size_t folds;
+    bool project_all;
+
+    CrossValidationOptions() :
+        super(), folds(10), project_all(true)
+    {}
+
+    void parseOpt(string name, mxArray* val) {
+        if (name == "folds") {
+            folds = get_size_t(val, "folds must be a positive integer");
+            if (folds < 2)
+                mexErrMsgTxt("folds must be at least 2");
+
+        } else if (name == "project_all") {
+            project_all = get_bool(val, "project_all must be a boolean");
+        } else {
+            super::parseOpt(name, val);
+        }
+    }
+};
+
+template <typename Scalar>
+double crossvalidate(
+        const mxArray* bags_m, const mxArray* labels_m, const mxArray* opts_m)
+{
+    // first argument: bags
+    mwSize num = mxGetNumberOfElements(bags_m);
+    MatrixF *bags = get_matrix_array(bags_m, num, true);
+    // XXX these bags can (and should) die when we exit the function
+
+    // second argument: labels
+    const vector<int> labels = get_vector<int>(labels_m,
+            "second argument must be an array of integers");
+    if (labels.size() > num)
+        mexErrMsgTxt("got more labels than bags");
+    else if (labels.size() < num)
+        mexErrMsgTxt("got more bags than labels");
+
+    // third argument: options
+    if (!mxIsStruct(opts_m) && mxGetNumberOfElements(opts_m) == 1)
+        mexErrMsgTxt("train 3rd argument must be a single struct");
+    mwSize nfields = mxGetNumberOfFields(opts_m);
+
+    CrossValidationOptions opts;
+    for (mwSize i = 0; i < nfields; i++) {
+        opts.parseOpt(
+                string(mxGetFieldNameByNumber(opts_m, i)),
+                mxGetFieldByNumber(opts_m, 0, i));
+    }
+
+    npdivs::DivFunc* div_func = opts.getDivFunc();
+    sdm::KernelGroup* kernel_group = opts.getKernelGroup();
+
+    double acc;
+    try {
+        // train away!
+        acc = sdm::crossvalidate<Scalar>(
+                bags, num, labels,
+                *div_func, *kernel_group,
+                opts.getDivParams(),
+                opts.folds,
+                opts.project_all,
+                opts.getCvals(),
+                opts.getSVMParams(),
+                opts.tuning_folds);
+
+    } catch (...) {
+        delete kernel_group; delete div_func;
+        free_matalloced_matrix_array(bags, num);
+        throw;
+    }
+    delete kernel_group;
+    delete div_func;
+    free_matalloced_matrix_array(bags, num);
+
+    return acc;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Dispatch function
@@ -561,7 +662,11 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         plhs[3] = mxCreateDoubleScalar(model->getSVM()->param.C);
 
     } else if (op == "crossvalidate") {
-        // TODO: cross-validation
+        if (nrhs != 4) mexErrMsgTxt("crossvalidate takes exactly 3 arguments");
+        if (nlhs != 1) mexErrMsgTxt("crossvalidate returns exactly 1 output");
+
+        double acc = crossvalidate<float>(prhs[1], prhs[2], prhs[3]);
+        plhs[0] = mxCreateDoubleScalar(acc);
 
     }  else {
         mexErrMsgTxt(("Unknown operation '" + op + "'.").c_str());

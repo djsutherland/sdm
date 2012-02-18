@@ -149,7 +149,52 @@ classdef SDM < handle
         end
 
         % TODO: do cross-validation on a dataset
-        function [acc] = crossvalidate()
+        function [acc] = crossvalidate(bags, labels, options)
+            % Trains a support distribution machine on test data.
+            %
+            % Arguments:
+            %   bags: a cell array of samples from distributions
+            %       Must have the same number of columns, but may have different
+            %       numbers of rows.
+            %
+            %   labels: a vector of integer labels for each bag
+            %
+            %   options: a struct array whose elements might include:
+            %
+            %       folds: the number of CV folds (default 10)
+            %
+            %       project_all: whether to project the entire estimated
+            %           kernel matrix to be PSD; if false, only projects the
+            %           training data for a given fold and leaves the rest
+            %           unprojected. Default true.
+            %
+            %       div_func: the divergence function to use.
+            %           examples: "renyi:.8", "l2", "bc", "linear".
+            %           default: "l2"
+            %
+            %       kernel: the type of kernel to use.
+            %           choices: "linear", "polynomial", "gaussian"
+            %           default: "gaussian"
+            %           "linear" and "polynomial" only make sense with
+            %           "linear" div_func; others should use "gaussian"
+            %
+            %       k: the k of k-nearest-neighbors. default 3
+            %
+            %       tuning_folds: the number of folds to use for the tuning CV
+            %           default 3
+            %
+            %       probability: whether to use SVMs with probability estimates
+            %
+            %       num_threads: the number of threads to use for calculations.
+            %           0 (the default) means one per core
+            %
+            %       index: the nearest-neighbor index type.
+            %           options: "linear", "kdtree"
+            %           default: "kdtree"
+            %           For high-dimensional data (over 10ish), use linear
+
+            if nargin < 3; options = struct(); end
+            acc = sdm_mex('crossvalidate', bags, labels, options);
         end
     end
 end
