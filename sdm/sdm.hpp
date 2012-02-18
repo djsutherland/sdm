@@ -235,7 +235,7 @@ namespace detail {
             const std::vector<int> &labels,
             const boost::ptr_vector<Kernel> &kernels,
             const std::vector<double> &c_vals,
-            svm_parameter &svm_params,
+            svm_parameter svm_params,
             size_t folds);
 
     // split a full matrix into testing/training matrices
@@ -458,6 +458,130 @@ const {
 ////////////////////////////////////////////////////////////////////////////////
 // Cross-validation
 
+namespace detail {
+
+template <typename Scalar> size_t do_cv_fold(
+        const flann::Matrix<Scalar> *bags, size_t num_bags,
+        size_t test_start, size_t test_end,
+        const std::vector<int> &labels,
+        const npdivs::DivFunc *div_func,
+        const boost::ptr_vector<Kernel> *kernels,
+        const double *divs,
+        svm_parameter svm_params,
+        const std::vector<double> c_vals,
+        size_t tuning_folds,
+        bool project_all_data,
+        const npdivs::DivParams div_params)
+{
+    typedef flann::Matrix<Scalar> Matrix;
+
+    // testing is in [test_start, test_end)
+    size_t num_test = test_end - test_start;
+    size_t num_train = num_bags - num_test;
+
+    // copy into training / testing data
+    Matrix *train_bags = new Matrix[num_train];
+    Matrix *test_bags  = new Matrix[num_test];
+
+    for (size_t i = 0; i < test_start; i++)
+        train_bags[i] = bags[i];
+    for (size_t i = test_start; i < test_end; i++)
+        test_bags[i - test_start] = bags[i];
+    for (size_t i = test_end; i < num_bags; i++)
+        train_bags[i - num_test] = bags[i];
+
+    // set up training labels
+    std::vector<int> train_labels(num_train);
+    std::copy(labels.begin(), labels.begin() + test_start,
+            train_labels.begin());
+    std::copy(labels.begin() + test_end, labels.end(),
+            train_labels.begin() + test_start);
+
+    // tune the kernel parameters
+    double *train_km = new double[num_train * num_train];
+    double *test_km = new double[num_test * num_train];
+    copy_from_full_to_split(divs, train_km, test_km,
+            test_start, num_train, num_test);
+
+    const std::pair<size_t, size_t> &best_config = tune_params(
+            train_km, num_train, train_labels, *kernels, c_vals,
+            svm_params, tuning_folds);
+
+    const Kernel &kernel = (*kernels)[best_config.first];
+    svm_params.C = c_vals[best_config.second];
+
+    // project either the whole matrix or just the training
+
+    if (project_all_data) {
+        double *full_km = new double[num_bags * num_bags];
+        std::copy(divs, divs + num_bags * num_bags, full_km);
+
+        kernel.transformDivergences(full_km, num_bags);
+        project_to_symmetric_psd(full_km, num_bags);
+
+        copy_from_full_to_split(
+                full_km, train_km, test_km, test_start, num_train, num_test);
+
+        delete[] full_km;
+
+    } else {
+        copy_from_full_to_split(
+                divs, train_km, test_km, test_start, num_train, num_test);
+
+        kernel.transformDivergences(train_km, num_train);
+        project_to_symmetric_psd(train_km, num_train);
+
+        kernel.transformDivergences(test_km, num_test, num_train);
+    }
+
+    // set up svm parameters
+    svm_problem prob;
+    prob.l = num_train;
+    prob.y = new double[num_train];
+    for (size_t i = 0; i < num_train; i++)
+        prob.y[i] = double(train_labels[i]);
+    detail::store_kernel_matrix(prob, train_km, true);
+
+    // check svm params
+    const char* error = svm_check_parameter(&prob, &svm_params);
+    if (error != NULL) {
+        std::cerr << "LibSVM parameter error: " << error << std::endl;
+        throw std::domain_error(error);
+    }
+
+    // train!
+    svm_model *svm = svm_train(&prob, &svm_params);
+    SDM<Scalar> sdm(*svm, prob, *div_func, kernel, div_params,
+            svm_get_nr_class(svm), train_bags, num_train);
+
+    // predict!
+    const std::vector<int> &preds = sdm.predict(test_bags, num_test);
+
+    // how many did we get right?
+    size_t num_correct = 0;
+    for (size_t i = 0; i < num_test; i++)
+        if (preds[i] == labels[test_start + i])
+            num_correct++;
+
+    // clean up
+    delete[] train_km;
+    delete[] test_km;
+    delete[] train_bags;
+    delete[] test_bags;
+    for (size_t i = 0; i < num_train; i++)
+        delete[] prob.x[i];
+    delete[] prob.x;
+    delete[] prob.y;
+    svm_free_model_content(svm);
+    delete svm;
+
+    return num_correct;
+}
+
+
+} // end detail namespace
+
+
 template <typename Scalar>
 double crossvalidate(
     const flann::Matrix<Scalar> *bags, size_t num_bags,
@@ -481,15 +605,6 @@ double crossvalidate(
             "Can't use %d folds with only %d bags.") % folds % num_bags).str());
     }
 
-    size_t num_train = (size_t) std::ceil(num_bags * (1. - 1. / folds));
-    size_t num_test  = (size_t) std::ceil(double(num_bags) / folds);
-
-    Matrix *train_bags = new Matrix[num_train];
-    Matrix *test_bags  = new Matrix[num_test];
-    std::vector<int> train_labels;
-
-    size_t num_correct = 0;
-
     // copy the svm params so we can change them
     svm_parameter svm_p = svm_params;
     svm_p.svm_type = C_SVC;
@@ -505,115 +620,30 @@ double crossvalidate(
 
     // ask for the list of kernels to choose from
     const boost::ptr_vector<Kernel> *kernels =
-        kernel_group.getTuningVector(divs->ptr(), num_train);
+        kernel_group.getTuningVector(divs->ptr(), num_bags);
+
+    size_t num_correct = 0;
+    size_t num_test = (size_t) std::ceil(double(num_bags) / folds);
 
     for (size_t fold = 0; fold < folds; fold++) {
-        // testing is in [test_start, test_end)
         size_t test_start = fold * num_test;
         size_t test_end = std::min(test_start + num_test, num_bags);
-        size_t this_num_test = test_end - test_start;
-        size_t this_num_train = num_bags - this_num_test;
 
         if (test_start == test_end)
-            break;
+            continue;
 
-        // copy into training / testing data
-        for (size_t i = 0; i < test_start; i++)
-            train_bags[i] = bags[i];
-        for (size_t i = test_start; i < test_end; i++)
-            test_bags[i - test_start] = bags[i];
-        for (size_t i = test_end; i < num_bags; i++)
-            train_bags[i - this_num_test] = bags[i];
-
-        // set up training labels
-        train_labels.resize(this_num_train);
-        std::copy(labels.begin(), labels.begin() + test_start,
-                train_labels.begin());
-        std::copy(labels.begin() + test_end, labels.end(),
-                train_labels.begin() + test_start);
-
-        // tune the kernel parameters
-        double *train_km = new double[this_num_train * this_num_train];
-        double *test_km = new double[this_num_test * this_num_train];
-        detail::copy_from_full_to_split(divs[0].ptr(), train_km, test_km,
-                test_start, this_num_train, this_num_test);
-
-        const std::pair<size_t, size_t> &best_config =
-            detail::tune_params(train_km, this_num_train, train_labels,
-                    *kernels, c_vals, svm_p, folds);
-        const Kernel &kernel = (*kernels)[best_config.first];
-        svm_p.C = c_vals[best_config.second];
-
-        // project either the whole matrix or just the training
-
-        if (project_all_data) {
-            double *full_km = new double[num_bags * num_bags];
-            std::copy(divs[0].ptr(), divs[0].ptr() + num_bags * num_bags,
-                    full_km);
-
-            kernel.transformDivergences(full_km, num_bags);
-            project_to_symmetric_psd(full_km, num_bags);
-
-            detail::copy_from_full_to_split(full_km, train_km, test_km,
-                    test_start, this_num_train, this_num_test);
-
-            delete[] full_km;
-
-        } else {
-            detail::copy_from_full_to_split(divs[0].ptr(), train_km, test_km,
-                    test_start, this_num_train, this_num_test);
-
-            kernel.transformDivergences(train_km, this_num_train);
-            project_to_symmetric_psd(train_km, this_num_train);
-
-            kernel.transformDivergences(test_km, this_num_test, this_num_train);
-        }
-
-        // set up svm parameters
-        svm_problem prob;
-        prob.l = this_num_train;
-        prob.y = new double[this_num_train];
-        for (size_t i = 0; i < this_num_train; i++)
-            prob.y[i] = double(train_labels[i]);
-        detail::store_kernel_matrix(prob, train_km, true);
-
-        // check svm params
-        const char* error = svm_check_parameter(&prob, &svm_p);
-        if (error != NULL) {
-            std::cerr << "LibSVM parameter error: " << error << std::endl;
-            throw std::domain_error(error);
-        }
-
-        // train!
-        svm_model *svm = svm_train(&prob, &svm_p);
-        SDM<Scalar> sdm(*svm, prob, div_func, kernel, div_params,
-                svm_get_nr_class(svm), train_bags, this_num_train);
-
-        // predict!
-        const std::vector<int> &preds = sdm.predict(test_bags, this_num_test);
-
-        // how many did we get right?
-        for (size_t i = 0; i < this_num_test; i++)
-            if (preds[i] == labels[test_start + i])
-                num_correct++;
-
-        // clean up
-        delete[] train_km;
-        delete[] test_km;
-        for (size_t i = 0; i < this_num_train; i++)
-            delete[] prob.x[i];
-        delete[] prob.x;
-        delete[] prob.y;
-        delete svm;
+        num_correct += detail::do_cv_fold(
+                bags, num_bags, test_start, test_end, labels,
+                &div_func, kernels, divs[0].ptr(), svm_p, c_vals,
+                tuning_folds, project_all_data, div_params);
     }
 
     // clean up
-    delete[] train_bags;
-    delete[] test_bags;
     delete kernels;
+    npdivs::free_matrix_array(divs, 1);
 
     // return accuracy
-    return double(num_correct) / double(num_bags);
+    return double(num_correct) / num_bags;
 }
 
 } // end namespace

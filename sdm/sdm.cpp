@@ -126,7 +126,7 @@ namespace detail {
             const std::vector<int> &labels,
             const boost::ptr_vector<Kernel> &kernels,
             const std::vector<double> &c_vals,
-            svm_parameter &svm_params,
+            svm_parameter svm_params,
             size_t folds)
     {
         typedef std::pair<size_t, size_t> config;
