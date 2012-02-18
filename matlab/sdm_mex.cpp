@@ -203,16 +203,16 @@ vector<K> get_vector(const mxArray *thing, const char* err_msg) {
     // switch on the input type, since we can only get a void*
     // ...thanks for being the worst, mex
     switch (mxGetClassID(thing)) {
-        case mxINT8_CLASS:   return _convert<char,               K>(data, n);
-        case mxUINT8_CLASS:  return _convert<unsigned char,      K>(data, n);
-        case mxINT16_CLASS:  return _convert<short,              K>(data, n);
-        case mxUINT16_CLASS: return _convert<unsigned short,     K>(data, n);
-        case mxINT32_CLASS:  return _convert<int,                K>(data, n);
-        case mxUINT32_CLASS: return _convert<unsigned int,       K>(data, n);
-        case mxINT64_CLASS:  return _convert<long long,          K>(data, n);
-        case mxUINT64_CLASS: return _convert<unsigned long long, K>(data, n);
-        case mxSINGLE_CLASS: return _convert<float,              K>(data, n);
-        case mxDOUBLE_CLASS: return _convert<double,             K>(data, n);
+        case mxINT8_CLASS:   return _convert<int8_T,   K>(data, n);
+        case mxUINT8_CLASS:  return _convert<uint8_T,  K>(data, n);
+        case mxINT16_CLASS:  return _convert<int16_T,  K>(data, n);
+        case mxUINT16_CLASS: return _convert<uint16_T, K>(data, n);
+        case mxINT32_CLASS:  return _convert<int32_T,  K>(data, n);
+        case mxUINT32_CLASS: return _convert<uint32_T, K>(data, n);
+        case mxINT64_CLASS:  return _convert<int64_T,  K>(data, n);
+        case mxUINT64_CLASS: return _convert<uint64_T, K>(data, n);
+        case mxSINGLE_CLASS: return _convert<float,    K>(data, n);
+        case mxDOUBLE_CLASS: return _convert<double,   K>(data, n);
         default:
             mexErrMsgTxt(err_msg);
     }
