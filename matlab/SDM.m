@@ -78,7 +78,6 @@ classdef SDM < handle
         end
 
 
-        % TODO: predict on new data
         function [labels vals] = predict(this, test_dists)
             % Run on new test data and predict labels.
             %
@@ -102,7 +101,6 @@ classdef SDM < handle
     end
 
     methods (Static)
-        % TODO: train up a model
         function [model] = train(train_bags, labels, options)
             % Trains a support distribution machine on test data.
             %
@@ -148,7 +146,6 @@ classdef SDM < handle
             model = SDM(model_handle, labels, numel(train_bags), dim);
         end
 
-        % TODO: do cross-validation on a dataset
         function [acc] = crossvalidate(bags, labels, options)
             % Trains a support distribution machine on test data.
             %
