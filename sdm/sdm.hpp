@@ -91,6 +91,7 @@ class SDM {
         const npdivs::DivFunc *getDivFunc() const { return div_func; }
         const svm_model *getSVM() const { return &svm; }
         const npdivs::DivParams *getDivParams() const { return &div_params; }
+
         bool doesProbability() const {
             return svm_check_probability_model(&svm);
         }
@@ -99,16 +100,21 @@ class SDM {
             svm_get_labels(&svm, &vec[0]);
             return vec;
         }
+
+        size_t getNumTrain() const { return num_train; }
         size_t getDim() const {
             return num_train > 0 ? train_bags[0].cols : 0;
         }
         size_t getNumClasses() const { return num_classes; }
+        const flann::Matrix<Scalar> * getTrainBags() { return train_bags; }
 
         std::string name() const {
             return (boost::format(
-                        "SDM(%d classes, dim %d, %s, kernel %s, %d training%s)")
+                "SDM(%d classes, dim %d, %s, kernel %s, C %g, %d training%s)")
                     % num_classes % getDim()
-                    % div_func->name() % kernel->name() % num_train
+                    % div_func->name() % kernel->name()
+                    % svm.param.C
+                    % num_train
                     % (doesProbability() ? ", with prob" : "")
                 ).str();
         }

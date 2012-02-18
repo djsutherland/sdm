@@ -42,22 +42,41 @@ classdef SDM < handle
         cpp_handle;
     end
 
+    properties (SetAccess = immutable)
+        name;
+        num_classes;
+        num_train;
+        dim;
+        C;
+        kernel;
+        div_func;
+        labels;
+    end
+
     methods
-        % constructor...add a way to copy?
-        % TODO: should probably be private
-        function this = SDM(cpp_handle)
+        function this = SDM(cpp_handle, labels, num_train, dim)
+            % Make an SDM for a specific C++ instance.
             this.cpp_handle = cpp_handle;
+            this.labels = labels;
+            this.num_classes = numel(labels);
+            this.num_train = num_train;
+            this.dim = dim;
+
+            [this.name, this.kernel, this.div_func, this.C] = ...
+                sdm_mex('info', cpp_handle);
         end
 
-        % TODO: destructor
         function delete(this)
+            % Destroy the related C++ object and its attributes.
             sdm_mex('delete', this.cpp_handle);
         end
 
-        % get a string describing the model
-        function [name] = name(this)
-            name = sdm_mex('name', this.cpp_handle);
+
+        function [bags] = get_train_bags(this)
+            % Get a copy of the SDM's training distributions.
+            bags = sdm_mex('train_bags', this.cpp_handle);
         end
+
 
         % TODO: predict on new data
         function [labels vals] = predict(this, test_dists)
@@ -122,10 +141,11 @@ classdef SDM < handle
             %           For high-dimensional data (over 10ish), use linear
 
             % TODO: parameter checking
+            dim = size(train_bags{1}, 2);
 
             if nargin < 3; options = struct(); end
             model_handle = sdm_mex('train', train_bags, labels, options);
-            model = SDM(model_handle);
+            model = SDM(model_handle, labels, numel(train_bags), dim);
         end
 
         % TODO: do cross-validation on a dataset

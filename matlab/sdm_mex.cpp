@@ -300,10 +300,24 @@ template<> matlab_classid<uint64_T>::matlab_classid() : mxID(mxUINT64_CLASS) {}
 template<> matlab_classid<float>   ::matlab_classid() : mxID(mxSINGLE_CLASS) {}
 template<> matlab_classid<double>  ::matlab_classid() : mxID(mxDOUBLE_CLASS) {}
 
+// make a MATLAB row vector from a vector<T>
+template <typename T>
+mxArray *make_vector(const vector<T> vec) {
+    mwSize n = vec.size();
+
+    mxArray* mat =
+        mxCreateNumericMatrix(1, n, matlab_classid<T>().mxID, mxREAL);
+    T* data = (T*) mxGetData(mat);
+
+    for (size_t i = 0; i < n; i++)
+        data[i] = vec[i];
+    return mat;
+}
+
 // make a MATLAB matrix from a vector<vector<T>>
 // assumes the inner vectors are of equal length
 template <typename T>
-mxArray *make_matrix(vector< vector<T> > vec_matrix) {
+mxArray *make_matrix(const vector< vector<T> > vec_matrix) {
     mwSize m = vec_matrix.size();
     mwSize n = m > 0 ? vec_matrix[0].size() : 0;
 
@@ -317,18 +331,28 @@ mxArray *make_matrix(vector< vector<T> > vec_matrix) {
     return mat;
 }
 
-// make a MATLAB row vector from a vector<T>
+// make a MATLAB matrix from a flann::Matrix<T>
 template <typename T>
-mxArray *make_vector(vector<T> vec) {
-    mwSize n = vec.size();
-
-    mxArray* mat =
-        mxCreateNumericMatrix(1, n, matlab_classid<T>().mxID, mxREAL);
+mxArray *make_matrix(const flann::Matrix<T> bag) {
+    mxClassID id = matlab_classid<T>().mxID;
+    mxArray* mat = mxCreateNumericMatrix(bag.rows, bag.cols, id, mxREAL);
     T* data = (T*) mxGetData(mat);
 
-    for (size_t i = 0; i < n; i++)
-        data[i] = vec[i];
+    for (size_t i = 0; i < bag.rows; i++)
+        for (size_t j = 0; j < bag.cols; j++)
+            data[i + j*bag.rows] = bag[i][j];
     return mat;
+}
+
+// make a MATLAB cell vector of matrices
+template <typename T>
+mxArray *make_matrix_cells(const flann::Matrix<T> *bags, size_t n) {
+    mxArray *cells = mxCreateCellMatrix(1, n);
+
+    for (size_t i = 0; i < n; i++)
+        mxSetCell(cells, i, make_matrix(bags[i]));
+
+    return cells;
 }
 
 
@@ -481,34 +505,7 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     // first arg is a string saying what the desired operation is
     string op = get_string(prhs[0], "first input must be a string");
 
-    if (op == "create") {
-        // TODO: constructor?
-    } else if (op == "delete") {
-        if (nrhs != 2) mexErrMsgTxt("delete needs exactly one argument");
-        if (nlhs > 0) mexErrMsgTxt("delete doesn't return anything");
-
-        destroy(convertMat2Ptr<SDMF>(prhs[1])->getPointer());
-
-    } else if (op == "name") {
-        if (nrhs != 2) mexErrMsgTxt("name takes exactly one argument");
-        if (nlhs != 1) mexErrMsgTxt("name returns exactly 1 output");
-
-        SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
-        plhs[0] = mxCreateString(model->name().c_str());
-
-    } else if (op == "train") {
-        if (nrhs != 4) mexErrMsgTxt("train needs exactly three arguments");
-        if (nlhs != 1) mexErrMsgTxt("train returns exactly 1 output");
-
-        SDMF *model = train<float>(prhs[1], prhs[2], prhs[3]);
-
-        class_handle<SDMF> * ptr = new class_handle<SDMF>(model);
-        plhs[0] = convertPtr2Mat<SDMF>(ptr);
-
-    } else if (op == "crossvalidate") {
-        // TODO: cross-validation
-
-    } else if (op == "predict") {
+    if (op == "predict") {
         if (nrhs != 3) mexErrMsgTxt("predict needs exactly 2 arguments");
         if (nlhs < 1 || nlhs > 2) mexErrMsgTxt("predict returns 1-2 values");
 
@@ -530,7 +527,43 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
         free_matalloced_matrix_array(test_bags, n);
 
-    } else {
+    } else if (op == "train") {
+        if (nrhs != 4) mexErrMsgTxt("train needs exactly three arguments");
+        if (nlhs != 1) mexErrMsgTxt("train returns exactly 1 output");
+
+        SDMF *model = train<float>(prhs[1], prhs[2], prhs[3]);
+
+        class_handle<SDMF> * ptr = new class_handle<SDMF>(model);
+        plhs[0] = convertPtr2Mat<SDMF>(ptr);
+
+    } else if (op == "delete") {
+        if (nrhs != 2) mexErrMsgTxt("delete needs exactly one argument");
+        if (nlhs > 0) mexErrMsgTxt("delete doesn't return anything");
+
+        destroy(convertMat2Ptr<SDMF>(prhs[1])->getPointer());
+
+    } else if (op == "train_bags") {
+        if (nrhs != 2) mexErrMsgTxt("train_bags takes exactly one argument");
+        if (nlhs != 1) mexErrMsgTxt("train_bags returns exactly 1 output");
+
+        SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
+        plhs[0] = make_matrix_cells(model->getTrainBags(),
+                                    model->getNumTrain());
+
+    } else if (op == "info") {
+        if (nrhs != 2) mexErrMsgTxt("info takes exactly one argument");
+        if (nlhs != 4) mexErrMsgTxt("info returns exactly 4 outputs");
+
+        SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
+        plhs[0] = mxCreateString(model->name().c_str());
+        plhs[1] = mxCreateString(model->getKernel()->name().c_str());
+        plhs[2] = mxCreateString(model->getDivFunc()->name().c_str());
+        plhs[3] = mxCreateDoubleScalar(model->getSVM()->param.C);
+
+    } else if (op == "crossvalidate") {
+        // TODO: cross-validation
+
+    }  else {
         mexErrMsgTxt(("Unknown operation '" + op + "'.").c_str());
     }
 }
