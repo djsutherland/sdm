@@ -50,7 +50,9 @@
 
 namespace sdm {
 
-// TODO memory ownership with this is all screwy...make it clearer
+// TODO: probability models seem to just suck (at least on one example)
+//       - is this a bug or something wrong with the model?
+// TODO: memory ownership with this is all screwy...make it clearer
 template <typename Scalar>
 class SDM {
     const svm_model &svm;
@@ -82,12 +84,51 @@ class SDM {
         }
 
         void destroyModelAndProb();
+        void destroyTrainBags();
 
+        // getters and so on
         const Kernel *getKernel() const { return kernel; }
         const npdivs::DivFunc *getDivFunc() const { return div_func; }
         const svm_model *getSVM() const { return &svm; }
-        const size_t getNumClasses() const { return num_classes; }
-        std::string name() const;
+        const npdivs::DivParams *getDivParams() const { return &div_params; }
+        bool doesProbability() const {
+            return svm_check_probability_model(&svm);
+        }
+        const std::vector<int> getLabels() const {
+            std::vector<int> vec(num_classes);
+            svm_get_labels(&svm, &vec[0]);
+            return vec;
+        }
+        size_t getDim() const {
+            return num_train > 0 ? train_bags[0].cols : 0;
+        }
+        size_t getNumClasses() const { return num_classes; }
+
+        std::string name() const {
+            return (boost::format(
+                        "SDM(%d classes, dim %d, %s, kernel %s, %d training%s)")
+                    % num_classes % getDim()
+                    % div_func->name() % kernel->name() % num_train
+                    % (doesProbability() ? ", with prob" : "")
+                ).str();
+        }
+
+        // Prediction functions, for either one or many test bags.
+        //
+        // The overloads which take a vector reference will put either decision
+        // values or probabilities into it, depending on doesProbability().
+        // Any existing contests will be discarded.
+        //
+        // For decision values:
+        //    There are num_classes * (num_classes - 1) / 2 values, for all of
+        //    the pairwise class comparisons.  The order is
+        //        label[0]-vs-label[1], ..., label[0]-vs-label[n-1],
+        //        label[1]-vs-label[2], ..., label[n-2] vs label[n-1],
+        //    where the label ordering is as in getLabels().
+        //
+        // For probabilities:
+        //    There is one estimate per class, in the same order as in
+        //    getLabels().
 
         int predict(const flann::Matrix<Scalar> &test_bag) const;
         int predict(const flann::Matrix<Scalar> &test_bag,
@@ -130,8 +171,10 @@ const svm_parameter default_svm_params = {
 };
 const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 11);
 
-// Function to train a new SDM. Note that the caller is responsible for deleting
-// the svm and svm_prob attributes.
+// Function to train a new SDM. Note that the caller is responsible for
+// deleting the svm and svm_prob attributes, as well as train_bags.
+// The destroyModelAndProb() and destroyTrainBags() functions might be
+// helpful for this.
 //
 // TODO: a mass-training method for more than one kernel
 // TODO: option to do the projection on test data as well
@@ -210,6 +253,8 @@ namespace detail {
 template <typename Scalar>
 void SDM<Scalar>::destroyModelAndProb() {
     // FIXME: rework SDM memory model to avoid gross const_casts
+    // TODO: rename
+    // TODO: just have SDM copy everything it needs?
 
     svm_free_model_content(const_cast<svm_model*> (&svm));
     delete const_cast<svm_model*>(&svm);
@@ -219,6 +264,13 @@ void SDM<Scalar>::destroyModelAndProb() {
     delete[] svm_prob.x;
     delete[] svm_prob.y;
     delete const_cast<svm_problem*>(&svm_prob);
+}
+
+template <typename Scalar>
+void SDM<Scalar>::destroyTrainBags() {
+    npdivs::free_matrix_array(
+            const_cast<flann::Matrix<Scalar> *>(train_bags),
+            num_train);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -357,9 +409,13 @@ const {
             backward[i][j] = (forward[j][i] + backward[i][j]) / 2.0;
 
     // figure out which prediction function we want to use
+    bool do_prob = svm_check_probability_model(&svm);
+
     double (*pred_fn)(const svm_model*, const svm_node*, double*) =
-        svm_check_probability_model(&svm)
-        ? &svm_predict_probability : &svm_predict_values;
+        do_prob ? &svm_predict_probability : &svm_predict_values;
+
+    size_t num_vals = do_prob
+        ? num_classes : (num_classes * (num_classes - 1)) / 2;
 
     // we'll reuse this svm_node array for testing
     svm_node kernel_row[num_train+2];
@@ -380,7 +436,7 @@ const {
             kernel_row[j+1].value = backward[i][j];
 
         // get space to store our decision/probability values
-        vals[i].resize(num_classes);
+        vals[i].resize(num_vals);
 
         // ask the SVM for a prediction
         double res = pred_fn(&svm, kernel_row, &vals[i][0]);

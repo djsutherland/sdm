@@ -124,58 +124,6 @@ inline class_handle<base> *convertMat2Ptr(const mxArray *in) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Helper functions to convert between MATLAB matrices and flann::Matrix
-
-// Copy a MATLAB array of type T into a flann::Matrix<float>.
-template <typename T>
-void copyIntoFlann(const mxArray *bag, mwSize rows, mwSize cols,
-                   MatrixF &target)
-{
-    const T* bag_data = (T*) mxGetData(bag);
-
-    // copy from column-major source to row-major dest, also cast contents
-    for (size_t i = 0; i < rows; i++)
-        for (size_t j = 0; j < cols; j++)
-            target[i][j] = (float) bag_data[j*rows + i];
-}
-
-// Copy a MATLAB cell array of distribution samples (with consistent number
-// of columns) into a newly-allocated array of flann::Matrix<float>s.
-MatrixF *get_matrix_array(const mxArray *bags, mwSize n) {
-    MatrixF *flann_bags = (MatrixF *) mxCalloc(n, sizeof(MatrixF));
-
-    mwSize rows;
-    const mwSize cols = mxGetN(mxGetCell(bags, 0));
-
-    const mxArray *bag;
-
-    for (mwSize i = 0; i < n; i++) {
-        bag = mxGetCell(bags, i);
-
-        // check dimensions
-        if (mxGetNumberOfDimensions(bag) != 2)
-            mexErrMsgTxt("bag has too many dimensions");
-        rows = mxGetM(bag);
-        if (mxGetN(bag) != cols)
-            mexErrMsgTxt("inconsistent number of columns in bags");
-
-        // allocate the result matrix
-        flann_bags[i] = MatrixF(
-                (float*) mxCalloc(rows * cols, sizeof(float)),
-                rows, cols);
-
-        if (mxIsDouble(bag))
-            copyIntoFlann<double>(bag, rows, cols, flann_bags[i]);
-        else if (mxIsSingle(bag))
-            copyIntoFlann<float>(bag, rows, cols, flann_bags[i]);
-        else
-            mexErrMsgTxt("unsupported bag type");
-    }
-
-    return flann_bags;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Helpers to convert from MATLAB to C++ types
 
 string get_string(const mxArray *thing, const char* err_msg) {
@@ -269,11 +217,128 @@ vector<K> get_vector(const mxArray *thing, const char* err_msg) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Helper functions to convert from MATLAB matrices to flann::Matrix
+
+// Copy a MATLAB array of type T into a flann::Matrix<float>.
+template <typename T>
+void copyIntoFlann(const mxArray *bag, mwSize rows, mwSize cols,
+                   MatrixF &target)
+{
+    const T* bag_data = (T*) mxGetData(bag);
+
+    // copy from column-major source to row-major dest, also cast contents
+    for (size_t i = 0; i < rows; i++)
+        for (size_t j = 0; j < cols; j++)
+            target[i][j] = (float) bag_data[j*rows + i];
+}
+
+// Copy a MATLAB cell array of distribution samples (with consistent number
+// of columns) into a newly-allocated array of flann::Matrix<float>s.
+MatrixF *get_matrix_array(const mxArray *bags, mwSize n, bool mat_alloc=true) {
+    MatrixF *flann_bags;
+    if (mat_alloc)
+        flann_bags = (MatrixF *) mxCalloc(n, sizeof(MatrixF));
+    else
+        flann_bags = new MatrixF[n];
+
+    mwSize rows;
+    const mwSize cols = mxGetN(mxGetCell(bags, 0));
+
+    const mxArray *bag;
+
+    for (mwSize i = 0; i < n; i++) {
+        bag = mxGetCell(bags, i);
+
+        // check dimensions
+        if (mxGetNumberOfDimensions(bag) != 2)
+            mexErrMsgTxt("bag has too many dimensions");
+        rows = mxGetM(bag);
+        if (mxGetN(bag) != cols)
+            mexErrMsgTxt("inconsistent number of columns in bags");
+
+        // allocate the result matrix
+        float* data;
+        if (mat_alloc)
+            data = (float*) mxCalloc(rows * cols, sizeof(float));
+        else
+            data = new float[rows * cols];
+        flann_bags[i] = MatrixF(data, rows, cols);
+
+        if (mxIsDouble(bag))
+            copyIntoFlann<double>(bag, rows, cols, flann_bags[i]);
+        else if (mxIsSingle(bag))
+            copyIntoFlann<float>(bag, rows, cols, flann_bags[i]);
+        else
+            mexErrMsgTxt("unsupported bag type");
+    }
+
+    return flann_bags;
+}
+
+void free_matalloced_matrix_array(MatrixF *bags, mwSize n) {
+    for (mwSize i = 0; i < n; i++)
+        mxFree(bags[i].ptr());
+    mxFree(bags);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Helpers to convert from C++ to MATLAB types
+
+template <typename T> struct matlab_classid {
+    mxClassID mxID;
+    matlab_classid() : mxID(mxUNKNOWN_CLASS) {}
+};
+template<> matlab_classid<int8_T>  ::matlab_classid() : mxID(mxINT8_CLASS) {}
+template<> matlab_classid<uint8_T> ::matlab_classid() : mxID(mxUINT8_CLASS) {}
+template<> matlab_classid<int16_T> ::matlab_classid() : mxID(mxINT16_CLASS) {}
+template<> matlab_classid<uint16_T>::matlab_classid() : mxID(mxUINT16_CLASS) {}
+template<> matlab_classid<int32_T> ::matlab_classid() : mxID(mxINT32_CLASS) {}
+template<> matlab_classid<uint32_T>::matlab_classid() : mxID(mxUINT32_CLASS) {}
+template<> matlab_classid<int64_T> ::matlab_classid() : mxID(mxINT64_CLASS) {}
+template<> matlab_classid<uint64_T>::matlab_classid() : mxID(mxUINT64_CLASS) {}
+template<> matlab_classid<float>   ::matlab_classid() : mxID(mxSINGLE_CLASS) {}
+template<> matlab_classid<double>  ::matlab_classid() : mxID(mxDOUBLE_CLASS) {}
+
+// make a MATLAB matrix from a vector<vector<T>>
+// assumes the inner vectors are of equal length
+template <typename T>
+mxArray *make_matrix(vector< vector<T> > vec_matrix) {
+    mwSize m = vec_matrix.size();
+    mwSize n = m > 0 ? vec_matrix[0].size() : 0;
+
+    mxClassID id = matlab_classid<T>().mxID;
+    mxArray* mat = mxCreateNumericMatrix(m, n, id, mxREAL);
+    T* data = (T*) mxGetData(mat);
+
+    for (size_t i = 0; i < m; i++)
+        for (size_t j = 0; j < n; j++)
+            data[i + j*m] = vec_matrix[i][j];
+    return mat;
+}
+
+// make a MATLAB row vector from a vector<T>
+template <typename T>
+mxArray *make_vector(vector<T> vec) {
+    mwSize n = vec.size();
+
+    mxArray* mat =
+        mxCreateNumericMatrix(1, n, matlab_classid<T>().mxID, mxREAL);
+    T* data = (T*) mxGetData(mat);
+
+    for (size_t i = 0; i < n; i++)
+        data[i] = vec[i];
+    return mat;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 // Constructor / destructor
 
 template <typename Scalar>
 void destroy(SDM<Scalar> *model) {
     model->destroyModelAndProb();
+    model->destroyTrainBags();
     delete model;
 }
 
@@ -301,7 +366,8 @@ SDM<Scalar> * train(
 {
     // first argument: training bags
     mwSize num_train = mxGetNumberOfElements(bags_m);
-    MatrixF *bags = get_matrix_array(bags_m, num_train); // FIXME: this'll leak
+    MatrixF *bags = get_matrix_array(bags_m, num_train, false);
+    // XXX these bags need to live as long as the SDM does, so alloc w/ new
 
     // second argument: labels
     const vector<int> labels = get_vector<int>(labels_m,
@@ -443,7 +509,26 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         // TODO: cross-validation
 
     } else if (op == "predict") {
-        // TODO: prediction
+        if (nrhs != 3) mexErrMsgTxt("predict needs exactly 2 arguments");
+        if (nlhs < 1 || nlhs > 2) mexErrMsgTxt("predict returns 1-2 values");
+
+        SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
+
+        mwSize n = mxGetNumberOfElements(prhs[2]);
+        flann::Matrix<float> *test_bags = get_matrix_array(prhs[2], n);
+        // these are allocated by matlab, so will die on mex exit
+
+        if (nlhs == 2) {
+            vector< vector<double> > vals;
+            const vector<int> labels = model->predict(test_bags, n, vals);
+            plhs[0] = make_vector(labels);
+            plhs[1] = make_matrix(vals);
+        } else {
+            const vector<int> labels = model->predict(test_bags, n);
+            plhs[0] = make_vector(labels);
+        }
+
+        free_matalloced_matrix_array(test_bags, n);
 
     } else {
         mexErrMsgTxt(("Unknown operation '" + op + "'.").c_str());

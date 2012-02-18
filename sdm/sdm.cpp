@@ -36,13 +36,6 @@
 
 namespace sdm {
 
-template <typename Scalar>
-std::string SDM<Scalar>::name() const {
-    return (boost::format("SDM(%s, %s, C=%g, %d training)")
-            % div_func->name() % kernel->name()
-            % svm.param.C % num_train).str();
-}
-
 // explicit instantiations
 
 template class SDM<float>;

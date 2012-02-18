@@ -54,12 +54,31 @@ classdef SDM < handle
             sdm_mex('delete', this.cpp_handle);
         end
 
+        % get a string describing the model
         function [name] = name(this)
             name = sdm_mex('name', this.cpp_handle);
         end
 
         % TODO: predict on new data
-        function [labels vals] = predict(this)
+        function [labels vals] = predict(this, test_dists)
+            % Run on new test data and predict labels.
+            %
+            % Arguments:
+            %   test_dists: distributions of the same dimensionality as the
+            %       training bags. Either a cell array or a single matrix.
+            %
+            % Returns:
+            %   labels: a vector of predicted class labels for the distributions
+            %   vals: a matrix of decision values / probabilities for each test
+            %         point being of each class
+
+            if ~iscell(test_dists); test_dists = {test_dists}; end
+
+            if nargout == 2
+                [labels vals] = sdm_mex('predict', this.cpp_handle, test_dists);
+            else
+                labels = sdm_mex('predict', this.cpp_handle, test_dists);
+            end
         end
     end
 
