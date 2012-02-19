@@ -207,8 +207,15 @@ SDM<Scalar> * train_sdm(
 
 // Function to do cross-validation on the passed distributions.
 //
+// Specifying 0 folds means leave-one-out; specifying 1 fold or more
+// folds than there are bags will cause a std::domain_error.
+//
 // The project_all_data parameter specifies whether to project the entire
 // kernel matrix to PSD, or only the training data for a given fold.
+//
+// The divs parameter, if passed, should be a pointer to a row-major matrix of
+// precomputed divergences for the given bags, as given by
+// npdivs::np_divs(...)[i].ptr(). If NULL, will be computed.
 template <typename Scalar>
 double crossvalidate(
     const flann::Matrix<Scalar> *bags, size_t num_bags,
@@ -221,7 +228,8 @@ double crossvalidate(
     bool project_all_data = true,
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
-    size_t tuning_folds = 3);
+    size_t tuning_folds = 3,
+    double *divs = NULL);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
@@ -670,7 +678,8 @@ double crossvalidate(
     bool project_all_data,
     const std::vector<double> &c_vals,
     const svm_parameter &svm_params,
-    size_t tuning_folds)
+    size_t tuning_folds,
+    double *divs)
 {
     typedef flann::Matrix<Scalar> Matrix;
 
@@ -692,17 +701,25 @@ double crossvalidate(
     // make libSVM shut up  -  TODO real logging
     svm_set_print_string_function(&detail::print_null);
 
-    // calculate the full matrix of divergences
-    flann::Matrix<double>* divs =
-        npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
-    np_divs(bags, num_bags, div_func, divs, div_params, false);
+    // calculate the full matrix of divergences if necessary
+    bool free_divs = false;
+
+    if (divs == NULL) {
+        flann::Matrix<double>* divs_mat =
+            npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
+        np_divs(bags, num_bags, div_func, divs_mat, div_params, false);
+
+        divs = divs_mat[0].ptr();
+        free_divs = true;
+        delete[] divs_mat; // doesn't delete content, just the Matrix array
+    }
 
     // symmetrize divergence estimates
-    symmetrize(divs[0].ptr(), num_bags);
+    symmetrize(divs, num_bags);
 
     // ask for the list of kernels to choose from
     const boost::ptr_vector<Kernel> *kernels =
-        kernel_group.getTuningVector(divs->ptr(), num_bags);
+        kernel_group.getTuningVector(divs, num_bags);
 
     // figure out the numbers of threads to use
     size_t div_threads = npdivs::get_num_threads(div_params.num_threads);
@@ -725,7 +742,7 @@ double crossvalidate(
         // don't actually launch separate threads, 'tis a waste
 
         detail::cv_worker<Scalar> worker(bags, num_bags, labels, &div_func,
-                kernels, divs[0].ptr(), svm_p, c_vals, tuning_folds,
+                kernels, divs, svm_p, c_vals, tuning_folds,
                 project_all_data, pred_div_params, jobs_mutex, jobs,
                 results_mutex, num_correct);
 
@@ -753,7 +770,7 @@ double crossvalidate(
 
         for (size_t i = 0; i < num_cv_threads; i++) {
             workers.push_back(new detail::cv_worker<Scalar>(
-                bags, num_bags, labels, &div_func, kernels, divs[0].ptr(),
+                bags, num_bags, labels, &div_func, kernels, divs,
                 svm_p, c_vals, tuning_folds, project_all_data, pred_div_params,
                 jobs_mutex, jobs, results_mutex, num_correct
             ));
@@ -765,7 +782,8 @@ double crossvalidate(
 
     // clean up
     delete kernels;
-    npdivs::free_matrix_array(divs, 1);
+    if (free_divs)
+        delete[] divs;
 
     // return accuracy
     return double(num_correct) / num_bags;

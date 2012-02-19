@@ -70,7 +70,8 @@ template double crossvalidate<float>(
     const npdivs::DivParams &div_params,
     size_t folds, size_t num_cv_threads, bool project_all_data,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
-    size_t tuning_folds);
+    size_t tuning_folds,
+    double* divs);
 
 template double crossvalidate<double>(
     const flann::Matrix<double> *bags, size_t num_bags,
@@ -79,7 +80,8 @@ template double crossvalidate<double>(
     const npdivs::DivParams &div_params,
     size_t folds, size_t num_cv_threads, bool project_all_data,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
-    size_t tuning_folds);
+    size_t tuning_folds,
+    double* divs);
 
 
 
