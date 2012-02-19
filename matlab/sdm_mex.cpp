@@ -521,10 +521,11 @@ struct CrossValidationOptions : public TrainingOptions {
     typedef TrainingOptions super;
 
     size_t folds;
+    size_t cv_threads;
     bool project_all;
 
     CrossValidationOptions() :
-        super(), folds(10), project_all(true)
+        super(), folds(10), cv_threads(0), project_all(true)
     {}
 
     void parseOpt(string name, mxArray* val) {
@@ -533,6 +534,9 @@ struct CrossValidationOptions : public TrainingOptions {
             if (folds < 2)
                 mexErrMsgTxt("folds must be at least 2");
 
+        } else if (name == "cv_threads") {
+            cv_threads = get_size_t(val,
+                    "cv_threads must be a nonnegative integer");
         } else if (name == "project_all") {
             project_all = get_bool(val, "project_all must be a boolean");
         } else {
@@ -573,6 +577,9 @@ double crossvalidate(
     npdivs::DivFunc* div_func = opts.getDivFunc();
     sdm::KernelGroup* kernel_group = opts.getKernelGroup();
 
+    if (opts.folds > num)
+        opts.folds = num;
+
     double acc;
     try {
         // train away!
@@ -582,6 +589,7 @@ double crossvalidate(
                 opts.getDivParams(),
                 opts.folds,
                 opts.project_all,
+                opts.cv_threads,
                 opts.getCvals(),
                 opts.getSVMParams(),
                 opts.tuning_folds);
@@ -602,7 +610,7 @@ double crossvalidate(
 ////////////////////////////////////////////////////////////////////////////////
 // Dispatch function
 
-void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
+void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     // first arg is a string saying what the desired operation is
     string op = get_string(prhs[0], "first input must be a string");
 
@@ -670,5 +678,15 @@ void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
     }  else {
         mexErrMsgTxt(("Unknown operation '" + op + "'.").c_str());
+    }
+}
+
+void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
+    try {
+        dispatch(nlhs, plhs, nrhs, prhs);
+    } catch (std::exception &e) {
+        mexErrMsgTxt((boost::format("exception: %s") % e.what()).str().c_str());
+    } catch (...) {
+        mexErrMsgTxt("unknown error in sdm_mex");
     }
 }

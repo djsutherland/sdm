@@ -162,7 +162,13 @@ classdef SDM < handle
             %
             %   options: a struct array whose elements might include:
             %
-            %       folds: the number of CV folds (default 10)
+            %       folds: the number of CV folds (default 10).
+            %           0 means to do leave-one-out CV.
+            %
+            %       cv_threads: the maximum number of CV folds to run in
+            %           parallel; defaults to the value of num_threads. Will
+            %           not use more than max(cv_threads, num_threads) at
+            %           any point.
             %
             %       project_all: whether to project the entire estimated
             %           kernel matrix to be PSD; if false, only projects the

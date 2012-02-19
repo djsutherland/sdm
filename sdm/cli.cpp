@@ -78,6 +78,7 @@ struct ProgOpts : boost::noncopyable {
     size_t k;
     size_t num_threads;
     size_t cv_folds;
+    size_t cv_threads;
     size_t tuning_folds;
     bool prob;
     bool proj_indiv;
@@ -263,7 +264,8 @@ int main(int argc, char ** argv) {
         } else {
             double acc = crossvalidate(train_bags, num_train,
                     train_labels_ints, *opts.div_func, *opts.kernel_group,
-                    div_params, opts.cv_folds, !opts.proj_indiv,
+                    div_params, opts.cv_folds, opts.cv_threads,
+                    !opts.proj_indiv,
                     sdm::default_c_vals, svm_params, opts.tuning_folds);
             cout << opts.cv_folds << "-fold cross-validation accuracy on "
                 << num_train << " bags: " << 100. * acc << "%" << endl;
@@ -300,6 +302,11 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             po::value<size_t>(&opts.cv_folds)->default_value(10),
             "Do c-fold cross-validation on the data passed in --train-bags. "
             "Ignored if --test-bags is passed.")
+        ("cv-threads",
+            po::value<size_t>(&opts.cv_threads)->default_value(0),
+            "The max number of CV folds to do in parallel; defaults to the "
+            "value of --num-threads. Will not use more than "
+            "max(cv_threads, num_threads) threads at any point.")
         ("div-func,d",
             po::value<string>()->default_value("l2")->notifier(
                 boost::bind(&ProgOpts::parse_div_func, boost::ref(opts), _1)),

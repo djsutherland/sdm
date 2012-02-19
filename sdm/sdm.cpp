@@ -41,14 +41,15 @@ namespace sdm {
 template class SDM<float>;
 template class SDM<double>;
 
-template SDM<float> * train_sdm(
+
+template SDM<float> * train_sdm<float>(
     const flann::Matrix<float> *train_bags, size_t num_train,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
     const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
     const svm_parameter &svm_params, size_t tuning_folds);
 
-template SDM<double> * train_sdm(
+template SDM<double> * train_sdm<double>(
     const flann::Matrix<double> *train_bags, size_t num_train,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
@@ -56,21 +57,25 @@ template SDM<double> * train_sdm(
     const svm_parameter &svm_params, size_t tuning_folds);
 
 
-template double crossvalidate(
+template double crossvalidate<float>(
     const flann::Matrix<float> *bags, size_t num_bags,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, size_t folds, bool project_all_data,
+    const npdivs::DivParams &div_params,
+    size_t folds, size_t num_cv_threads, bool project_all_data,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
     size_t tuning_folds);
 
-template double crossvalidate(
+template double crossvalidate<double>(
     const flann::Matrix<double> *bags, size_t num_bags,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, size_t folds, bool project_all_data,
+    const npdivs::DivParams &div_params,
+    size_t folds, size_t num_cv_threads, bool project_all_data,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
     size_t tuning_folds);
+
+
 
 // helper function implementations
 namespace detail {

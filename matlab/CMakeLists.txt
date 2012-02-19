@@ -54,7 +54,7 @@ if (MEX_CMD AND MEXEXT_CMD)
             "${Boost_THREAD_LIBRARY}"
         )
 
-        set(MEX_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp")
+        set(MEX_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp" "-g")
 
         # -I args
         foreach(i ${PROJECT_SOURCE_DIR} ${NPDIVS_INCLUDE_DIRS}

@@ -270,12 +270,14 @@ class EasySmallSDMTest : public ::testing::Test {
             size_t folds,
             const npdivs::DivFunc &div_func,
             const KernelGroup &kernel_group,
+            size_t cv_threads = 0,
             const vector<double> &cs = default_c_vals,
             size_t tuning_folds = 3,
             bool project_all = true)
     {
         return crossvalidate(train, num_train, labels, div_func, kernel_group,
-                div_params, folds, project_all, cs, svm_params, tuning_folds);
+            div_params, folds, cv_threads, project_all, cs, svm_params,
+            tuning_folds);
     }
 
 };
@@ -317,25 +319,69 @@ TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
         testTrainTest(div_func, kernel_group);
 }
 
-TEST_F(EasySmallSDMTest, CVPoly) {
+TEST_F(EasySmallSDMTest, CVPolySingleThreaded) {
     npdivs::DivLinear div_func;
     PolynomialKernelGroup kernel_group;
 
     svm_params.probability = 0;
     div_params.k = 2;
 
-    double acc = testCV(5, div_func, kernel_group);
+    double acc = testCV(5, div_func, kernel_group, 1);
     EXPECT_GT(acc, .7);
 }
 
-TEST_F(EasySmallSDMTest, CVRenyi) {
+TEST_F(EasySmallSDMTest, CVRenyiSingleThreaded) {
     npdivs::DivRenyi div_func(.99);
     GaussianKernelGroup kernel_group;
 
     svm_params.probability = 0;
     div_params.k = 2;
 
-    double acc = testCV(5, div_func, kernel_group);
+    double acc = testCV(5, div_func, kernel_group, 1);
+    EXPECT_GT(acc, .7);
+}
+
+TEST_F(EasySmallSDMTest, CVPolyTwoThreaded) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group, 2);
+    EXPECT_GT(acc, .7);
+}
+
+TEST_F(EasySmallSDMTest, CVRenyiTwoThreaded) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group, 2);
+    EXPECT_GT(acc, .7);
+}
+
+TEST_F(EasySmallSDMTest, CVPolyDefaultThreaded) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group, 0);
+    EXPECT_GT(acc, .7);
+}
+
+TEST_F(EasySmallSDMTest, CVRenyiDefaultThreaded) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double acc = testCV(5, div_func, kernel_group, 0);
     EXPECT_GT(acc, .7);
 }
 
