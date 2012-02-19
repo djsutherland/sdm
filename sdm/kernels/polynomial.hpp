@@ -66,7 +66,7 @@ private:
 
 namespace detail {
     const size_t degs[7] = { 1, 2, 3, 4, 5, 7, 9 };
-    const double coef0s[2] = { 1, 0 };
+    const double coef0s[1] = { 1 };
 }
 const std::vector<size_t> default_degrees(detail::degs, detail::degs + 7);
 const std::vector<double> default_coef0s(detail::coef0s, detail::coef0s + 2);
