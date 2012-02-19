@@ -325,8 +325,10 @@ TEST_F(EasySmallSDMTest, CVPolySingleThreaded) {
 
     svm_params.probability = 0;
     div_params.k = 2;
+    div_params.num_threads = 1;
 
     double acc = testCV(5, div_func, kernel_group, 1);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
@@ -336,8 +338,10 @@ TEST_F(EasySmallSDMTest, CVRenyiSingleThreaded) {
 
     svm_params.probability = 0;
     div_params.k = 2;
+    div_params.num_threads = 1;
 
     double acc = testCV(5, div_func, kernel_group, 1);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
@@ -349,6 +353,7 @@ TEST_F(EasySmallSDMTest, CVPolyTwoThreaded) {
     div_params.k = 2;
 
     double acc = testCV(5, div_func, kernel_group, 2);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
@@ -360,6 +365,7 @@ TEST_F(EasySmallSDMTest, CVRenyiTwoThreaded) {
     div_params.k = 2;
 
     double acc = testCV(5, div_func, kernel_group, 2);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
@@ -371,6 +377,7 @@ TEST_F(EasySmallSDMTest, CVPolyDefaultThreaded) {
     div_params.k = 2;
 
     double acc = testCV(5, div_func, kernel_group, 0);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
@@ -382,6 +389,7 @@ TEST_F(EasySmallSDMTest, CVRenyiDefaultThreaded) {
     div_params.k = 2;
 
     double acc = testCV(5, div_func, kernel_group, 0);
+    cout << "Accuracy: " << acc << endl;
     EXPECT_GT(acc, .7);
 }
 
