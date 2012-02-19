@@ -135,7 +135,7 @@ namespace detail {
     std::vector< std::pair<size_t, size_t> > tune_params_single(
             const double* divs, size_t num_bags,
             const std::vector<int> &labels,
-            const Kernel ** kernels, size_t num_kernels,
+            const Kernel * const * kernels, size_t num_kernels,
             const std::vector<double> &c_vals,
             svm_parameter svm_params,
             size_t folds,
@@ -223,7 +223,7 @@ namespace detail {
         const double* divs;
         const size_t num_bags;
         const std::vector<int> &labels;
-        const Kernel ** kernels;
+        const Kernel * const * kernels;
         const size_t num_kernels;
         const std::vector<double> &c_vals;
         const svm_parameter &svm_params;
@@ -236,7 +236,7 @@ namespace detail {
             const double* divs,
             const size_t num_bags,
             const std::vector<int> &labels,
-            const Kernel ** kernels,
+            const Kernel * const * kernels,
             const size_t num_kernels,
             const std::vector<double> &c_vals,
             const svm_parameter &svm_params,
@@ -275,27 +275,28 @@ namespace detail {
     {
         typedef std::pair<size_t, size_t> config;
 
-        num_threads = npdivs::get_num_threads(num_threads);
         size_t num_kernels = kernels.size();
-
-        if (num_threads > num_kernels)
-            num_threads = num_kernels;
-
-        // want to be able to take sub-lists of kernels, but the only
-        // good way to do that is with c_array(), which there's no
-        // const version of. so we const-cast it. grumble grumble.
-        const Kernel ** kern_array =
-            const_cast<const Kernel **>(
-                    const_cast<boost::ptr_vector<Kernel> &>(kernels).c_array());
 
         if (num_kernels == 0) {
             throw std::domain_error("no kernels in the kernel group");
-
         } else if (num_kernels == 1 && c_vals.size() == 1) {
             // only one option, we already know what's best
             return config(0, 0);
+        }
 
-        } else if (num_threads == 1) {
+
+        // want to be able to take sub-lists of kernels.
+        // this is like c_array(), but constness is slightly different and
+        // it works in old, old boosts.
+        const Kernel * const * kern_array =
+            reinterpret_cast<const Kernel* const*>(&kernels.begin().base()[0]);
+
+        // how many threads are we using?
+        num_threads = npdivs::get_num_threads(num_threads);
+        if (num_threads > num_kernels)
+            num_threads = num_kernels;
+
+        if (num_threads == 1) {
             // don't actually make a new thread if it's just 1-threaded
             size_t num_correct;
             return pick_rand(tune_params_single(divs, num_bags, labels,
@@ -307,7 +308,7 @@ namespace detail {
         boost::ptr_vector<tune_params_worker> workers;
         boost::thread_group worker_threads;
 
-        std::vector<config> *results = new std::vector<config>[num_threads];
+        std::vector< std::vector<config> > results(num_threads);
         std::vector<size_t> nums_correct(num_threads, 0);
 
         size_t kerns_per_thread = (size_t)
@@ -342,7 +343,6 @@ namespace detail {
             if (nums_correct[i] == best_correct)
                 best_configs.insert(best_configs.end(),
                         results[i].begin(), results[i].end());
-        delete[] results;
 
         return pick_rand(best_configs);
     }
