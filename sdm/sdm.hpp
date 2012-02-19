@@ -55,6 +55,9 @@
 
 namespace sdm {
 
+// TODO: optionally save and reuse flann indices and/or rhos, nus, esp. in CV
+//       (requires adding these options to npdivs...)
+
 // TODO: probability models seem to just suck (at least on one example)
 //       - is this a bug or something wrong with the model?
 // TODO: memory ownership with this is all screwy...make it clearer
@@ -235,14 +238,14 @@ namespace detail {
     bool terrible_kernel(double* km, size_t n, double const_thresh=1e-4);
 
     // cross-validation over possible svm / kernel parameters
-    // TODO: optionally parallelize tuning
     std::pair<size_t, size_t> tune_params(
             const double* divs, size_t num_bags,
             const std::vector<int> &labels,
             const boost::ptr_vector<Kernel> &kernels,
             const std::vector<double> &c_vals,
-            svm_parameter svm_params,
-            size_t folds);
+            const svm_parameter &svm_params,
+            size_t folds,
+            size_t num_threads);
 
     // split a full matrix into testing/training matrices
     void copy_from_full_to_split(const double *source,
@@ -329,7 +332,7 @@ SDM<Scalar> * train_sdm(
     // tuning: cross-validate over possible svm/kernel parameters
     const std::pair<size_t, size_t> &best_config =
         detail::tune_params(divs[0].ptr(), num_train, labels, *kernels,
-                c_vals, svm_p, tuning_folds);
+                c_vals, svm_p, tuning_folds, div_params.num_threads);
 
     // copy the kernel object so we can free the rest
     const Kernel *kernel = new_clone((*kernels)[best_config.first]);
@@ -570,7 +573,7 @@ public:
 
         const std::pair<size_t, size_t> &best_config = tune_params(
                 train_km, num_train, train_labels, *kernels, c_vals,
-                svm_p, tuning_folds);
+                svm_p, tuning_folds, div_params.num_threads);
 
         const Kernel &kernel = (*kernels)[best_config.first];
         svm_p.C = c_vals[best_config.second];

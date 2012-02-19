@@ -32,7 +32,13 @@
 
 #include "sdm/sdm.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <utility>
+#include <vector>
+
 #include <boost/format.hpp>
+#include <boost/thread.hpp>
 
 namespace sdm {
 
@@ -125,22 +131,26 @@ namespace detail {
 
 
     // cross-validation over possible svm / kernel parameters
-    // TODO: optionally parallelize tuning
-    std::pair<size_t, size_t> tune_params(
+    // this is the single-threaded version, called by the multithreaded below
+    std::vector< std::pair<size_t, size_t> > tune_params_single(
             const double* divs, size_t num_bags,
             const std::vector<int> &labels,
-            const boost::ptr_vector<Kernel> &kernels,
+            const Kernel ** kernels, size_t num_kernels,
             const std::vector<double> &c_vals,
             svm_parameter svm_params,
-            size_t folds)
+            size_t folds,
+            size_t *final_correct)
     {
         typedef std::pair<size_t, size_t> config;
-        size_t num_kernels = kernels.size();
+
+        // keep track of the best kernel/C combos
+        // keep all with same acc, to avoid bias towards ones we see earlier
+        std::vector<config> best_configs;
+        size_t best_correct = 0;
 
         if (num_kernels == 0) {
-            throw std::domain_error("no kernels in the kernel group");
-        } else if (num_kernels == 1 && c_vals.size() == 1) {
-            return config(0, 0);
+            *final_correct = best_correct;
+            return best_configs;
         }
 
         // make our svm_problem that we'll be reusing throughout
@@ -153,11 +163,6 @@ namespace detail {
         // store un-transformed divs in the problem just so it's all allocated
         store_kernel_matrix(*prob, divs, true);
 
-        // keep track of the best kernel/C combos
-        // keep all with same acc, to avoid bias towards ones we see earlier
-        std::vector<config> best_configs;
-        size_t best_correct = 0;
-
         // make a copy of divergences so we can mangle it
         double *km = new double[num_bags * num_bags];
 
@@ -167,7 +172,7 @@ namespace detail {
         for (size_t k = 0; k < num_kernels; k++) {
             // turn into a kernel matrix
             std::copy(divs, divs + num_bags * num_bags, km);
-            kernels[k].transformDivergences(km, num_bags);
+            kernels[k]->transformDivergences(km, num_bags);
             project_to_symmetric_psd(km, num_bags);
 
             // is it a constant matrix or something else awful?
@@ -205,6 +210,139 @@ namespace detail {
         delete[] prob->x;
         delete[] prob->y;
         delete prob;
+
+        *final_correct = best_correct;
+        return best_configs;
+    }
+
+    // functor object to do multithreading of tune_params
+    struct tune_params_worker : boost::noncopyable {
+    protected:
+        typedef std::pair<size_t, size_t> config;
+
+        const double* divs;
+        const size_t num_bags;
+        const std::vector<int> &labels;
+        const Kernel ** kernels;
+        const size_t num_kernels;
+        const std::vector<double> &c_vals;
+        const svm_parameter &svm_params;
+        const size_t folds;
+        std::vector<config> *results;
+        size_t *num_correct;
+
+    public:
+        tune_params_worker(
+            const double* divs,
+            const size_t num_bags,
+            const std::vector<int> &labels,
+            const Kernel ** kernels,
+            const size_t num_kernels,
+            const std::vector<double> &c_vals,
+            const svm_parameter &svm_params,
+            const size_t folds,
+            std::vector<config> *results,
+            size_t *num_correct)
+        :
+            divs(divs), num_bags(num_bags), labels(labels),
+            kernels(kernels), num_kernels(num_kernels), c_vals(c_vals),
+            svm_params(svm_params), folds(folds),
+            results(results), num_correct(num_correct)
+        {}
+
+        void operator()() {
+            *results = tune_params_single(divs, num_bags, labels,
+                    kernels, num_kernels, c_vals,
+                    svm_params, folds, num_correct);
+        }
+    };
+
+    // cross-validation over possible svm / kernel parameters
+    //
+    // This is the multithreaded version, which combines results from the
+    // single-threaded version above. We split up a certain number of kernels
+    // to each thread. Each thread does all the C values for a given kernel,
+    // to avoid having to re-project matrices. It might make sense to split
+    // that up in certain cases in the future.
+    std::pair<size_t, size_t> tune_params(
+            const double* divs, size_t num_bags,
+            const std::vector<int> &labels,
+            const boost::ptr_vector<Kernel> &kernels,
+            const std::vector<double> &c_vals,
+            const svm_parameter &svm_params,
+            size_t folds,
+            size_t num_threads)
+    {
+        typedef std::pair<size_t, size_t> config;
+
+        num_threads = npdivs::get_num_threads(num_threads);
+        size_t num_kernels = kernels.size();
+
+        if (num_threads > num_kernels)
+            num_threads = num_kernels;
+
+        // want to be able to take sub-lists of kernels, but the only
+        // good way to do that is with c_array(), which there's no
+        // const version of. so we const-cast it. grumble grumble.
+        const Kernel ** kern_array =
+            const_cast<const Kernel **>(
+                    const_cast<boost::ptr_vector<Kernel> &>(kernels).c_array());
+
+        if (num_kernels == 0) {
+            throw std::domain_error("no kernels in the kernel group");
+
+        } else if (num_kernels == 1 && c_vals.size() == 1) {
+            // only one option, we already know what's best
+            return config(0, 0);
+
+        } else if (num_threads == 1) {
+            // don't actually make a new thread if it's just 1-threaded
+            size_t num_correct;
+            return pick_rand(tune_params_single(divs, num_bags, labels,
+                        kern_array, num_kernels, c_vals, svm_params, folds,
+                        &num_correct));
+        }
+
+        // grunt work to set up multithreading
+        boost::ptr_vector<tune_params_worker> workers;
+        boost::thread_group worker_threads;
+
+        std::vector<config> *results = new std::vector<config>[num_threads];
+        std::vector<size_t> nums_correct(num_threads, 0);
+
+        size_t kerns_per_thread = (size_t)
+                std::ceil(double(num_kernels) / num_threads);
+        size_t kern_start = 0;
+
+        // give each thread a few kernels and get their most-accurate configs
+        for (size_t i = 0; i < num_threads; i++) {
+            size_t n_kerns =
+                std::min(kern_start+kerns_per_thread, num_kernels)
+                - kern_start;
+
+            workers.push_back(new tune_params_worker(
+                        divs, num_bags, labels,
+                        kern_array + kern_start, n_kerns,
+                        c_vals, svm_params, folds,
+                        &results[i], &nums_correct[i]
+            ));
+
+            worker_threads.create_thread(boost::ref(workers[i]));
+
+            kern_start += kerns_per_thread;
+        }
+        worker_threads.join_all();
+
+        // get all the best configs into one vector
+        size_t best_correct = *std::max_element(
+                nums_correct.begin(), nums_correct.end());
+        std::vector<config> best_configs;
+
+        for (size_t i = 0; i < num_threads; i++)
+            if (nums_correct[i] == best_correct)
+                best_configs.insert(best_configs.end(),
+                        results[i].begin(), results[i].end());
+        delete[] results;
 
         return pick_rand(best_configs);
     }
