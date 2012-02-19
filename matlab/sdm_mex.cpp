@@ -251,33 +251,22 @@ void copyIntoFlann(const mxArray *bag, mwSize rows, mwSize cols,
 
 template <typename K>
 flann::Matrix<K> get_matrix(const mxArray *mat, K* data) {
-    mwSize rows = mxGetM(mat);
-    mwSize cols = mxGetM(mat);
-    flann::Matrix<K> fla(data, rows, cols);
+    mwSize r = mxGetM(mat);
+    mwSize c = mxGetM(mat);
+    flann::Matrix<K> fla(data, r, c);
 
     switch (mxGetClassID(mat)) {
-        case mxINT8_CLASS:   copyIntoFlann<int8_T,   K>(mat, rows, cols, fla);
-            break;
-        case mxUINT8_CLASS:  copyIntoFlann<uint8_T,  K>(mat, rows, cols, fla);
-            break;
-        case mxINT16_CLASS:  copyIntoFlann<int16_T,  K>(mat, rows, cols, fla);
-            break;
-        case mxUINT16_CLASS: copyIntoFlann<uint16_T, K>(mat, rows, cols, fla);
-            break;
-        case mxINT32_CLASS:  copyIntoFlann<int32_T,  K>(mat, rows, cols, fla);
-            break;
-        case mxUINT32_CLASS: copyIntoFlann<uint32_T, K>(mat, rows, cols, fla);
-            break;
-        case mxINT64_CLASS:  copyIntoFlann<int64_T,  K>(mat, rows, cols, fla);
-            break;
-        case mxUINT64_CLASS: copyIntoFlann<uint64_T, K>(mat, rows, cols, fla);
-            break;
-        case mxSINGLE_CLASS: copyIntoFlann<float,    K>(mat, rows, cols, fla);
-            break;
-        case mxDOUBLE_CLASS: copyIntoFlann<double,   K>(mat, rows, cols, fla);
-            break;
-        default:
-            mexErrMsgTxt("unsupported bag type");
+        case mxINT8_CLASS:   copyIntoFlann<int8_T,   K>(mat, r, c, fla); break;
+        case mxUINT8_CLASS:  copyIntoFlann<uint8_T,  K>(mat, r, c, fla); break;
+        case mxINT16_CLASS:  copyIntoFlann<int16_T,  K>(mat, r, c, fla); break;
+        case mxUINT16_CLASS: copyIntoFlann<uint16_T, K>(mat, r, c, fla); break;
+        case mxINT32_CLASS:  copyIntoFlann<int32_T,  K>(mat, r, c, fla); break;
+        case mxUINT32_CLASS: copyIntoFlann<uint32_T, K>(mat, r, c, fla); break;
+        case mxINT64_CLASS:  copyIntoFlann<int64_T,  K>(mat, r, c, fla); break;
+        case mxUINT64_CLASS: copyIntoFlann<uint64_T, K>(mat, r, c, fla); break;
+        case mxSINGLE_CLASS: copyIntoFlann<float,    K>(mat, r, c, fla); break;
+        case mxDOUBLE_CLASS: copyIntoFlann<double,   K>(mat, r, c, fla); break;
+        default: mexErrMsgTxt("unsupported bag type");
     }
     return fla;
 }
