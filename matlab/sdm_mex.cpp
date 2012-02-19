@@ -809,13 +809,6 @@ struct DivOptions {
         flann::SearchParams search_params(-1);
         return DivParams(k, getIndexParams(), search_params, num_threads);
     }
-
-    boost::ptr_vector<npdivs::DivFunc> getDivFuncs() const {
-        boost::ptr_vector<npdivs::DivFunc> dfs;
-        for (size_t i = 0; i < div_funcs.size(); i++)
-            dfs.push_back(npdivs::div_func_from_str(div_funcs[i]));
-        return dfs;
-    }
 };
 
 mxArray* do_divs(const mxArray *x_bags_m, const mxArray *y_bags_m,
@@ -859,12 +852,17 @@ mxArray* do_divs(const mxArray *x_bags_m, const mxArray *y_bags_m,
         num_df = 1;
     }
 
+    boost::ptr_vector<npdivs::DivFunc> dfs;
+    for (size_t i = 0; i < num_df; i++)
+        dfs.push_back(npdivs::div_func_from_str(opts.div_funcs[i]));
+
     // allocate space for results
     MatrixD *divs = matalloc_matrix_array<double>(num_df, num_x, num_y);
 
+
     // run it!
     npdivs::np_divs(x_bags, num_x, y_bags, num_y,
-            opts.getDivFuncs(), divs, opts.getDivParams());
+            dfs, divs, opts.getDivParams());
 
     // copy into output
     mxArray* divs_cell = make_matrix_cells(divs, num_df);
