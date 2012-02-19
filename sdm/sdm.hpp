@@ -155,6 +155,14 @@ class SDM {
                 const flann::Matrix<Scalar> *test_bags, size_t num_test,
                 std::vector< std::vector<double> > &vals)
             const;
+
+        // Prediction if you already have kernel values; used in CV.
+        // km should be a row-major flat matrix with num_test rows and
+        // num_train columns.
+        void predict_from_kerns(double* km, size_t num_test,
+                std::vector<int> &preds,
+                std::vector< std::vector<double> > &vals)
+            const;
 };
 
 // set up default values for training
@@ -445,12 +453,22 @@ const {
     delete[] div_data_oth;
 
     // pass through the kernel
-    kernel->transformDivergences(divs.ptr(), num_test, num_train);
+    kernel->transformDivergences(div_data, num_test, num_train);
 
     // can't project because it's not square...
 
+    std::vector<int> preds;
+    predict_from_kerns(div_data, num_test, preds, vals);
+    delete[] div_data;
+    return preds;
+}
+
+template <typename Scalar>
+void SDM<Scalar>::predict_from_kerns(double* km, size_t num_test,
+        std::vector<int> &preds, std::vector< std::vector<double> > &vals)
+const {
     // figure out which prediction function we want to use
-    bool do_prob = svm_check_probability_model(&svm);
+    bool do_prob = doesProbability();
 
     double (*pred_fn)(const svm_model*, const svm_node*, double*) =
         do_prob ? &svm_predict_probability : &svm_predict_values;
@@ -459,34 +477,30 @@ const {
         ? num_classes : (num_classes * (num_classes - 1)) / 2;
 
     // we'll reuse this svm_node array for testing
-    svm_node kernel_row[num_train+2];
+    svm_node *kernel_row = new svm_node[num_train+2];
     for (size_t i = 0; i <= num_train; i++)
         kernel_row[i].index = i;
     kernel_row[num_train+1].index = -1;
 
-    // even though those fns return doubles, we'll round to an int because
-    // we want integer class labels
-    std::vector<int> pred_labels(num_test);
-
     // predict!
+    preds.resize(num_test);
     vals.resize(num_test);
+
     for (size_t i = 0; i < num_test; i++) {
         // fill in our kernel evaluations
         kernel_row[0].value = -i - 1;
         for (size_t j = 0; j < num_train; j++)
-            kernel_row[j+1].value = divs[i][j];
+            kernel_row[j+1].value = km[i * num_train + j];
 
         // get space to store our decision/probability values
         vals[i].resize(num_vals);
 
-        // ask the SVM for a prediction
+        // ask the SVM for a prediction and round to integer class label
         double res = pred_fn(&svm, kernel_row, &vals[i][0]);
-        pred_labels[i] = (int) std::floor(res + .5);
+        preds[i] = (int) std::floor(res + .5);
     }
 
-    delete[] div_data;
-
-    return pred_labels;
+    delete[] kernel_row;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -648,7 +662,9 @@ public:
                 svm_get_nr_class(svm), train_bags, num_train);
 
         // predict!
-        const std::vector<int> &preds = sdm.predict(test_bags, num_test);
+        std::vector<int> preds;
+        std::vector< std::vector<double> > vals;
+        sdm.predict_from_kerns(test_km, num_test, preds, vals);
 
         // how many did we get right?
         size_t num_correct = 0;
@@ -736,7 +752,7 @@ double crossvalidate(
     if (num_cv_threads == 0) num_cv_threads = div_threads;
     if (num_cv_threads > folds) num_cv_threads = folds;
 
-    // don't want to blow up total # of threads when the workers are predicting
+    // don't want to blow up total # of threads when the workers are tuning
     npdivs::DivParams pred_div_params = div_params;
     pred_div_params.num_threads = std::max(size_t(1),
             size_t(double(div_threads) / num_cv_threads));
