@@ -871,7 +871,7 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     string op = get_string(prhs[0], "first input must be a string");
 
     if (op == "predict") {
-        if (nrhs != 3) mexErrMsgTxt("predict needs exactly 2 arguments");
+        if (nrhs < 3 || nrhs > 4) mexErrMsgTxt("predict takes 2-3 arguments");
         if (nlhs < 1 || nlhs > 2) mexErrMsgTxt("predict returns 1-2 values");
 
         SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
@@ -880,17 +880,37 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         MatrixF *test_bags = get_matrix_array<float>(prhs[2], n);
         // these are allocated by matlab, so will die on mex exit
 
-        if (nlhs == 2) {
-            vector< vector<double> > vals;
-            const vector<int> labels = model->predict(test_bags, n, vals);
-            plhs[0] = make_vector(labels);
-            plhs[1] = make_matrix(vals);
-        } else {
-            const vector<int> labels = model->predict(test_bags, n);
-            plhs[0] = make_vector(labels);
+        size_t num_train = model->getNumTrain();
+
+        double *divs = NULL;
+        if (nrhs >= 4) {
+            if (mxGetNumberOfDimensions(prhs[4]) != 2 ||
+                    mxGetM(prhs[4]) != n ||
+                    mxGetN(prhs[4]) != num_train) {
+                mexWarnMsgTxt("precomputed divergences not n_test x n_train; "
+                              "ignoring them");
+            } else {
+                divs = (double*) mxCalloc(n * num_train, sizeof(double));
+                get_matrix(prhs[4], divs);
+            }
         }
 
+        // TODO: if predict becomes more efficient without vals, check here
+        vector<int> preds;
+        vector< vector<double> > vals;
+        if (divs == NULL) {
+            preds = model->predict(test_bags, n, vals);
+        } else {
+            model->getKernel()->transformDivergences(divs, n, num_train);
+            model->predict_from_kerns(divs, n, preds, vals);
+        }
+
+        plhs[0] = make_vector(preds);
+        if (nlhs >= 2)
+            plhs[1] = make_matrix(vals);
+
         free_matalloced_matrix_array(test_bags, n);
+        if (divs != NULL) mxFree(divs);
 
     } else if (op == "train") {
         if (nrhs < 4 || nrhs > 5) mexErrMsgTxt("train takes 3-4 arguments");

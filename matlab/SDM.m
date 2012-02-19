@@ -82,12 +82,21 @@ classdef SDM < handle
         end
 
 
-        function [labels vals] = predict(this, test_dists)
+        function [labels vals] = predict(this, test_dists, divs)
             % Run on new test data and predict labels.
             %
             % Arguments:
             %   test_dists: distributions of the same dimensionality as the
             %       training bags. Either a cell array or a single matrix.
+            %
+            %   divs: optional precomputed divergences from the training bags
+            %       to the test bags, preferably symmetrized. should be
+            %       num_test x num_train.
+            %
+            %       If Ds is the full matrix of divergences and test/train are
+            %       arrays of indices for the test/training data, you can get
+            %       this by:
+            %           (Ds(test,train) + Ds(train,test)') / 2
             %
             % Returns:
             %   labels: a vector of predicted class labels for the distributions
@@ -95,11 +104,13 @@ classdef SDM < handle
             %         point being of each class
 
             if ~iscell(test_dists); test_dists = {test_dists}; end
+            if nargin < 3; divs = []; end
 
             if nargout == 2
-                [labels vals] = sdm_mex('predict', this.cpp_handle, test_dists);
+                [labels vals] = sdm_mex('predict', ...
+                                        this.cpp_handle, test_dists, divs);
             else
-                labels = sdm_mex('predict', this.cpp_handle, test_dists);
+                labels = sdm_mex('predict', this.cpp_handle, test_dists, divs);
             end
         end
     end
