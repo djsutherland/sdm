@@ -62,7 +62,7 @@ classdef SDM < handle
             % Make an SDM for a specific C++ instance.
             this.cpp_handle = cpp_handle;
             this.labels = labels;
-            this.num_classes = numel(labels);
+            this.num_classes = numel(unique(labels));
             this.num_train = num_train;
             this.dim = dim;
 
