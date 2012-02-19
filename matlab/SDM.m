@@ -1,31 +1,31 @@
-% Copyright (c) 2012, Dougal J. Sutherland (dsutherl@cs.cmu.edu).             
-% All rights reserved.                                                        
-%                                                                             
-% Redistribution and use in source and binary forms, with or without          
-% modification, are permitted provided that the following conditions are met: 
-%                                                                             
-%     * Redistributions of source code must retain the above copyright        
-%       notice, this list of conditions and the following disclaimer.         
-%                                                                             
-%     * Redistributions in binary form must reproduce the above copyright     
-%       notice, this list of conditions and the following disclaimer in the   
-%       documentation and/or other materials provided with the distribution.  
-%                                                                             
-%     * Neither the name of Carnegie Mellon University nor the                
-%       names of the contributors may be used to endorse or promote products  
-%       derived from this software without specific prior written permission. 
-%                                                                             
-% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE   
-% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE  
-% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE   
-% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR         
-% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF        
-% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS    
-% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN     
-% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)     
-% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  
-% POSSIBILITY OF SUCH DAMAGE.                                                 
+% Copyright (c) 2012, Dougal J. Sutherland (dsutherl@cs.cmu.edu).
+% All rights reserved.
+%
+% Redistribution and use in source and binary forms, with or without
+% modification, are permitted provided that the following conditions are met:
+%
+%     * Redistributions of source code must retain the above copyright
+%       notice, this list of conditions and the following disclaimer.
+%
+%     * Redistributions in binary form must reproduce the above copyright
+%       notice, this list of conditions and the following disclaimer in the
+%       documentation and/or other materials provided with the distribution.
+%
+%     * Neither the name of Carnegie Mellon University nor the
+%       names of the contributors may be used to endorse or promote products
+%       derived from this software without specific prior written permission.
+%
+% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+% POSSIBILITY OF SUCH DAMAGE.
 
 
 % This is a MATLAB wrapper class for the C++ SDM class.
@@ -209,6 +209,45 @@ classdef SDM < handle
             if nargin < 3; options = struct(); end
             if nargin < 4; divs = []; end
             acc = sdm_mex('crossvalidate', bags, labels, options, divs);
+        end
+
+        function [Ds] = npdivs(x_bags, y_bags, opts)
+            % Estimates divergences between distributions.
+            %
+            %   x_bags: a cell array of data matrices (each n_i x D)
+            %
+            %   y_bags: a cell array of data matrices (each n_i x D), or [],
+            %         meaning the same thing as passing x_bags again (but is
+            %         computed more efficiently)
+            %
+            %   options: a struct array with the following possible members:
+            %
+            %         div_funcs: a cell array of string specifications for
+            %               divergence functions, such as 'l2', 'renyi:.99',
+            %               'alpha:.2'.
+            %
+            %               Default is {'l2'}.
+            %
+            %               Possible functions include l2, alpha, bc,
+            %               hellinger, renyi, linear.
+            %
+            %               Some support an argument specifying a divergence
+            %               parameter: renyi:.99 means the Renyi-.99
+            %               divergence.
+            %
+            %         k: the k for k-nearest-neighbor. Default 3.
+            %
+            %         index: the nearest-neighbor index to use. Options ar.
+            %              linear, kdtree. Default is kdtree. Use linear for
+            %              high-dimensional, relatively sparse data.
+            %
+            %         num_threads: the number of threads to use in calculation.
+            %              0 (the default) means one per core.
+
+            if nargin < 3; options = struct(); end
+            if nargin < 2; y_bags = []; end
+
+            Ds = sdm_mex('npdivs', x_bags, y_bags, opts);
         end
     end
 end

@@ -41,6 +41,8 @@
 #include <string>
 #include <vector>
 
+#include <boost/ptr_container/ptr_vector.hpp>
+
 #include <mex.h>
 
 #include <svm.h>
@@ -136,6 +138,19 @@ string get_string(const mxArray *thing, const char* err_msg) {
     string str(c_str);
     mxFree(c_str);
     return str;
+}
+
+vector<string> get_string_vec(const mxArray *thing, const char* err_msg) {
+    if (!mxIsCell(thing))
+        mexErrMsgTxt(err_msg);
+
+    mwSize n = mxGetNumberOfElements(thing);
+    vector<string> vec;
+    vec.reserve(n);
+
+    for (mwSize i = 0; i < n; i++)
+        vec.push_back(get_string(mxGetCell(thing, i), err_msg));
+    return vec;
 }
 
 double get_double(const mxArray *thing, const char* err_msg) {
@@ -356,7 +371,18 @@ flann::Matrix<K> *get_matrix_array(const mxArray *bags, mwSize n,
     return flann_bags;
 }
 
-void free_matalloced_matrix_array(MatrixF *bags, mwSize n) {
+template <typename T>
+flann::Matrix<T>* matalloc_matrix_array(size_t n, size_t rows, size_t cols) {
+    typedef flann::Matrix<T> Matrix;
+    Matrix* array = (Matrix*) mxCalloc(n, sizeof(Matrix));
+
+    for (size_t i = 0; i < n; i++) {
+        array[i] = Matrix((T*) mxCalloc(rows*cols, sizeof(T)), rows, cols);
+    }
+    return array;
+}
+
+void free_matalloced_matrix_array(flann::Matrix_ *bags, mwSize n) {
     for (mwSize i = 0; i < n; i++)
         mxFree(bags[i].ptr());
     mxFree(bags);
@@ -560,7 +586,7 @@ SDM<Scalar> * train(const mxArray* bags_m, const mxArray* labels_m,
         mexErrMsgTxt("got more bags than labels");
 
     // third argument: options
-    if (!mxIsStruct(opts_m) && mxGetNumberOfElements(opts_m) == 1)
+    if (!mxIsStruct(opts_m) || mxGetNumberOfElements(opts_m) != 1)
         mexErrMsgTxt("train 3rd argument must be a single struct");
     mwSize nfields = mxGetNumberOfFields(opts_m);
 
@@ -667,7 +693,7 @@ double crossvalidate(
         mexErrMsgTxt("got more bags than labels");
 
     // third argument: options
-    if (!mxIsStruct(opts_m) && mxGetNumberOfElements(opts_m) == 1)
+    if (!mxIsStruct(opts_m) || mxGetNumberOfElements(opts_m) != 1)
         mexErrMsgTxt("crossvalidate options must be a single struct");
     mwSize nfields = mxGetNumberOfFields(opts_m);
 
@@ -728,6 +754,125 @@ double crossvalidate(
         mxFree(divs);
 
     return acc;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Function to compute divergences
+// ...yeah, it's not SDM, but the helpers are here and it's easier for now
+
+struct DivOptions {
+    vector<string> div_funcs;
+    int k;
+    size_t num_threads;
+    string index_type;
+
+    DivOptions() :
+        k(3), num_threads(0), index_type("kdtree")
+    {}
+
+    void parseOpt(string name, mxArray* val) {
+        if (name == "div_funcs") {
+            div_funcs.push_back(get_string(val,
+                    "div_funcs must be cell array of strings"));
+
+        } else if (name == "k") {
+            k = get_size_t(val, "k must be a positive integer");
+            if (k < 1)
+                mexErrMsgTxt("k must be a positive integer");
+
+        } else if (name == "num_threads") {
+            num_threads = get_size_t(val,
+                    "num_threads must be a nonnegative integer");
+
+        } else if (name == "index") {
+            index_type = get_string(val, "index must be a string");
+
+        } else {
+            mexErrMsgTxt(("unknown training option: " + name).c_str());
+        }
+    }
+
+    // even though this looks like object slicing, it's not, i promise
+    flann::IndexParams getIndexParams() const {
+        if (index_type == "linear" || index_type == "brute") {
+            flann::LinearIndexParams ps;
+            return ps;
+        } else if (index_type == "kdtree" || index_type == "kd") {
+            flann::KDTreeSingleIndexParams ps;
+            return ps;
+        } else {
+            mexErrMsgTxt(("unknown index type: " + index_type).c_str());
+        }
+    }
+
+    DivParams getDivParams() const {
+        flann::SearchParams search_params(-1);
+        return DivParams(k, getIndexParams(), search_params, num_threads);
+    }
+
+    boost::ptr_vector<npdivs::DivFunc> getDivFuncs() const {
+        boost::ptr_vector<npdivs::DivFunc> dfs;
+        for (size_t i = 0; i < div_funcs.size(); i++)
+            dfs.push_back(npdivs::div_func_from_str(div_funcs[i]));
+        return dfs;
+    }
+};
+
+mxArray* do_divs(const mxArray *x_bags_m, const mxArray *y_bags_m,
+        const mxArray *opts_m) {
+    // x_bags; alloc with matlab, because they shouldn't persist
+    mwSize num_x = mxGetNumberOfElements(x_bags_m);
+    MatrixF *x_bags = get_matrix_array<float>(x_bags_m, num_x, true);
+
+    // y_bags
+    mwSize num_y = num_x;
+    MatrixF *y_bags = NULL;
+
+    if (y_bags_m != NULL) {
+        num_y = mxGetNumberOfElements(y_bags_m);
+        if (num_y == 0) {
+            num_y = num_x;
+        } else {
+            y_bags = get_matrix_array<float>(y_bags_m, num_y, true);
+        }
+    }
+
+    // third argument: options
+    if (!mxIsStruct(opts_m) || mxIsEmpty(opts_m))
+        mexErrMsgTxt("crossvalidate options must be a struct");
+    mwSize nfields = mxGetNumberOfFields(opts_m);
+    mwSize nels = mxGetNumberOfElements(opts_m);
+
+    DivOptions opts;
+    // elements other than cell arrays will be set repeatedly...
+    for (mwSize outer = 0; outer < nels; outer++) {
+        for (mwSize i = 0; i < nfields; i++) {
+            opts.parseOpt(
+                    string(mxGetFieldNameByNumber(opts_m, i)),
+                    mxGetFieldByNumber(opts_m, outer, i));
+        }
+    }
+
+    size_t num_df = opts.div_funcs.size();
+    if (num_df == 0) {
+        opts.div_funcs.push_back("l2");
+        num_df = 1;
+    }
+
+    // allocate space for results
+    MatrixD *divs = matalloc_matrix_array<double>(num_df, num_x, num_y);
+
+    // run it!
+    npdivs::np_divs(x_bags, num_x, y_bags, num_y,
+            opts.getDivFuncs(), divs, opts.getDivParams());
+
+    // copy into output
+    mxArray* divs_cell = make_matrix_cells(divs, num_df);
+
+    // kill temp vars
+    free_matalloced_matrix_array(divs, num_df);
+
+    return divs_cell;
 }
 
 
@@ -804,6 +949,12 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
                               prhs[4] : NULL;
         double acc = crossvalidate<float>(prhs[1], prhs[2], prhs[3], divs);
         plhs[0] = mxCreateDoubleScalar(acc);
+
+    } else if (op == "npdivs") {
+        if (nrhs != 4) mexErrMsgTxt("npdivs takes exactly three arguments");
+        if (nlhs != 1) mexErrMsgTxt("npdivs returns exactly 1 outputs");
+
+        plhs[0] = do_divs(prhs[1], prhs[2], prhs[3]);
 
     }  else {
         mexErrMsgTxt(("Unknown operation '" + op + "'.").c_str());
