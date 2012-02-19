@@ -53,14 +53,14 @@ template SDM<float> * train_sdm<float>(
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
     const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds);
+    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
 
 template SDM<double> * train_sdm<double>(
     const flann::Matrix<double> *train_bags, size_t num_train,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
     const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds);
+    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
 
 
 template double crossvalidate<float>(

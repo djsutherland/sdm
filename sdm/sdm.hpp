@@ -202,7 +202,8 @@ SDM<Scalar> * train_sdm(
     const npdivs::DivParams &div_params,
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
-    size_t tuning_folds = 3);
+    size_t tuning_folds = 3,
+    double *divs = NULL);
 
 
 // Function to do cross-validation on the passed distributions.
@@ -311,7 +312,8 @@ SDM<Scalar> * train_sdm(
         const npdivs::DivParams &div_params,
         const std::vector<double> &c_vals,
         const svm_parameter &svm_params,
-        size_t tuning_folds)
+        size_t tuning_folds,
+        double* divs)
 {   // TODO - logging
 
     if (c_vals.size() == 0) {
@@ -328,21 +330,28 @@ SDM<Scalar> * train_sdm(
     // make libSVM shut up  -  TODO real logging
     svm_set_print_string_function(&detail::print_null);
 
-    // first compute divergences
-    flann::Matrix<double>* divs =
-        npdivs::alloc_matrix_array<double>(1, num_train, num_train);
-    np_divs(train_bags, num_train, div_func, divs, div_params, false);
+    // first compute divergences, if necessary
+    bool free_divs = false;
+    if (divs == NULL) {
+        flann::Matrix<double>* divs_f =
+            npdivs::alloc_matrix_array<double>(1, num_train, num_train);
+        np_divs(train_bags, num_train, div_func, divs_f, div_params, false);
+
+        divs = divs_f[0].ptr();
+        free_divs = true;
+        delete[] divs_f; // just deletes the Matrix objects, not the data
+    }
 
     // symmetrize divergence estimates
-    symmetrize(divs[0].ptr(), num_train);
+    symmetrize(divs, num_train);
 
     // ask the kernel group for the kernels we'll pick from for tuning
     const boost::ptr_vector<Kernel>* kernels =
-        kernel_group.getTuningVector(divs->ptr(), num_train);
+        kernel_group.getTuningVector(divs, num_train);
 
     // tuning: cross-validate over possible svm/kernel parameters
     const std::pair<size_t, size_t> &best_config =
-        detail::tune_params(divs[0].ptr(), num_train, labels, *kernels,
+        detail::tune_params(divs, num_train, labels, *kernels,
                 c_vals, svm_p, tuning_folds, div_params.num_threads);
 
     // copy the kernel object so we can free the rest
@@ -351,8 +360,8 @@ SDM<Scalar> * train_sdm(
     delete kernels; // FIXME: potential leaks in here if something crashes
 
     // compute the final kernel matrix
-    kernel->transformDivergences(divs[0].ptr(), num_train);
-    project_to_symmetric_psd(divs[0].ptr(), num_train);
+    kernel->transformDivergences(divs, num_train);
+    project_to_symmetric_psd(divs, num_train);
 
     // set up the svm_problem
     svm_problem *prob = new svm_problem;
@@ -360,10 +369,11 @@ SDM<Scalar> * train_sdm(
     prob->y = new double[num_train];
     for (size_t i = 0; i < num_train; i++)
         prob->y[i] = labels[i];
-    detail::store_kernel_matrix(*prob, divs[0].ptr(), true);
+    detail::store_kernel_matrix(*prob, divs, true);
 
     // don't need the kernel values anymore
-    npdivs::free_matrix_array(divs, 1);
+    if (free_divs)
+        delete[] divs;
 
     // check svm parameters
     const char* error = svm_check_parameter(prob, &svm_p);

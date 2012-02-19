@@ -543,8 +543,8 @@ struct TrainingOptions {
 };
 
 template <typename Scalar>
-SDM<Scalar> * train(
-        const mxArray* bags_m, const mxArray* labels_m, const mxArray* opts_m)
+SDM<Scalar> * train(const mxArray* bags_m, const mxArray* labels_m,
+        const mxArray* opts_m, const mxArray* divs_m)
 {
     // first argument: training bags
     mwSize num_train = mxGetNumberOfElements(bags_m);
@@ -574,6 +574,21 @@ SDM<Scalar> * train(
     npdivs::DivFunc* div_func = opts.getDivFunc();
     sdm::KernelGroup* kernel_group = opts.getKernelGroup();
 
+    // fourth argument: precomputed divergences
+    double *divs;
+    if (divs_m == NULL) {
+        divs = NULL;
+    } else {
+        if (mxGetNumberOfDimensions(divs_m) != 2 ||
+                mxGetM(divs_m) != num_train || mxGetN(divs_m) != num_train) {
+            mexWarnMsgTxt("precomputed divergences not n x n; ignoring them");
+            divs = NULL;
+        } else {
+            divs = (double*) mxCalloc(num_train * num_train, sizeof(double));
+            MatrixD divs_f = get_matrix(divs_m, divs);
+        }
+    }
+
     SDMF *model;
 
     try {
@@ -584,11 +599,20 @@ SDM<Scalar> * train(
                 opts.getDivParams(),
                 opts.getCvals(),
                 opts.getSVMParams(),
-                opts.tuning_folds);
+                opts.tuning_folds,
+                divs);
 
-    } catch (...) { delete kernel_group; delete div_func; throw; }
+    } catch (...) {
+        delete kernel_group;
+        delete div_func;
+        if (divs != NULL)
+            mxFree(divs);
+        throw;
+    }
     delete kernel_group;
     delete div_func;
+    if (divs != NULL)
+        mxFree(divs);
 
     return model;
 }
@@ -693,6 +717,8 @@ double crossvalidate(
     } catch (...) {
         delete kernel_group; delete div_func;
         free_matalloced_matrix_array(bags, num);
+        if (divs != NULL)
+            mxFree(divs);
         throw;
     }
     delete kernel_group;
@@ -735,10 +761,12 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         free_matalloced_matrix_array(test_bags, n);
 
     } else if (op == "train") {
-        if (nrhs != 4) mexErrMsgTxt("train needs exactly three arguments");
+        if (nrhs < 4 || nrhs > 5) mexErrMsgTxt("train takes 3-4 arguments");
         if (nlhs != 1) mexErrMsgTxt("train returns exactly 1 output");
 
-        SDMF *model = train<float>(prhs[1], prhs[2], prhs[3]);
+        const mxArray* divs = (nrhs >= 5 && !mxIsEmpty(prhs[4])) ?
+                              prhs[4] : NULL;
+        SDMF *model = train<float>(prhs[1], prhs[2], prhs[3], divs);
 
         class_handle<SDMF> * ptr = new class_handle<SDMF>(model);
         plhs[0] = convertPtr2Mat<SDMF>(ptr);

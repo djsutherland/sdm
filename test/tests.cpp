@@ -20,6 +20,8 @@
 
 namespace {
 
+// TODO: test using precomputed divergences
+
 using namespace sdm;
 using namespace std;
 

@@ -105,7 +105,7 @@ classdef SDM < handle
     end
 
     methods (Static)
-        function [model] = train(train_bags, labels, options)
+        function [model] = train(train_bags, labels, options, divs)
             % Trains a support distribution machine on test data.
             %
             % Arguments:
@@ -141,12 +141,16 @@ classdef SDM < handle
             %           options: "linear", "kdtree"
             %           default: "kdtree"
             %           For high-dimensional data (over 10ish), use linear
+            %
+            %    divs: precomputed divergences among the bags. optional.
 
             % TODO: parameter checking
             dim = size(train_bags{1}, 2);
 
             if nargin < 3; options = struct(); end
-            model_handle = sdm_mex('train', train_bags, labels, options);
+            if nargin < 4; divs = []; end
+
+            model_handle = sdm_mex('train', train_bags, labels, options, divs);
             model = SDM(model_handle, labels, numel(train_bags), dim);
         end
 
