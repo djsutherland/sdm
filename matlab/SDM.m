@@ -150,7 +150,7 @@ classdef SDM < handle
             model = SDM(model_handle, labels, numel(train_bags), dim);
         end
 
-        function [acc] = crossvalidate(bags, labels, options)
+        function [acc] = crossvalidate(bags, labels, options, divs)
             % Trains a support distribution machine on test data.
             %
             % Arguments:
@@ -199,9 +199,12 @@ classdef SDM < handle
             %           options: "linear", "kdtree"
             %           default: "kdtree"
             %           For high-dimensional data (over 10ish), use linear
+            %
+            %    divs: precomputed divergences among the bags. optional.
 
             if nargin < 3; options = struct(); end
-            acc = sdm_mex('crossvalidate', bags, labels, options);
+            if nargin < 4; divs = []; end
+            acc = sdm_mex('crossvalidate', bags, labels, options, divs);
         end
     end
 end

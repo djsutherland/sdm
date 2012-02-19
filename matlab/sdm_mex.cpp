@@ -221,27 +221,68 @@ vector<K> get_vector(const mxArray *thing, const char* err_msg) {
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions to convert from MATLAB matrices to flann::Matrix
 
-// Copy a MATLAB array of type T into a flann::Matrix<float>.
-template <typename T>
+// Copy a MATLAB array of type T into a flann::Matrix<K>.
+template <typename T, typename K>
 void copyIntoFlann(const mxArray *bag, mwSize rows, mwSize cols,
-                   MatrixF &target)
+                   flann::Matrix<K> &target)
 {
     const T* bag_data = (T*) mxGetData(bag);
 
     // copy from column-major source to row-major dest, also cast contents
     for (size_t i = 0; i < rows; i++)
         for (size_t j = 0; j < cols; j++)
-            target[i][j] = (float) bag_data[j*rows + i];
+            target[i][j] = (K) bag_data[j*rows + i];
+}
+
+template <typename K>
+flann::Matrix<K> get_matrix(const mxArray *mat, K* data) {
+    mwSize rows = mxGetM(mat);
+    mwSize cols = mxGetM(mat);
+    flann::Matrix<K> fla(data, rows, cols);
+
+    switch (mxGetClassID(mat)) {
+        case mxINT8_CLASS:   copyIntoFlann<int8_T,   K>(mat, rows, cols, fla);
+            break;
+        case mxUINT8_CLASS:  copyIntoFlann<uint8_T,  K>(mat, rows, cols, fla);
+            break;
+        case mxINT16_CLASS:  copyIntoFlann<int16_T,  K>(mat, rows, cols, fla);
+            break;
+        case mxUINT16_CLASS: copyIntoFlann<uint16_T, K>(mat, rows, cols, fla);
+            break;
+        case mxINT32_CLASS:  copyIntoFlann<int32_T,  K>(mat, rows, cols, fla);
+            break;
+        case mxUINT32_CLASS: copyIntoFlann<uint32_T, K>(mat, rows, cols, fla);
+            break;
+        case mxINT64_CLASS:  copyIntoFlann<int64_T,  K>(mat, rows, cols, fla);
+            break;
+        case mxUINT64_CLASS: copyIntoFlann<uint64_T, K>(mat, rows, cols, fla);
+            break;
+        case mxSINGLE_CLASS: copyIntoFlann<float,    K>(mat, rows, cols, fla);
+            break;
+        case mxDOUBLE_CLASS: copyIntoFlann<double,   K>(mat, rows, cols, fla);
+            break;
+        default:
+            mexErrMsgTxt("unsupported bag type");
+    }
+    return fla;
 }
 
 // Copy a MATLAB cell array of distribution samples (with consistent number
-// of columns) into a newly-allocated array of flann::Matrix<float>s.
-MatrixF *get_matrix_array(const mxArray *bags, mwSize n, bool mat_alloc=true) {
-    MatrixF *flann_bags;
+// of columns) into a newly-allocated array of flann::Matrix<K>s.
+template <typename K>
+flann::Matrix<K> *get_matrix_array(const mxArray *bags, mwSize n,
+        bool mat_alloc=true)
+{
+    typedef flann::Matrix<K> Matrix;
+
+    if (!mxIsCell(bags))
+        mexErrMsgTxt("get_matrix_array: non-cell argument");
+
+    Matrix *flann_bags;
     if (mat_alloc)
-        flann_bags = (MatrixF *) mxCalloc(n, sizeof(MatrixF));
+        flann_bags = (Matrix *) mxCalloc(n, sizeof(Matrix));
     else
-        flann_bags = new MatrixF[n];
+        flann_bags = new Matrix[n];
 
     mwSize rows;
     const mwSize cols = mxGetN(mxGetCell(bags, 0));
@@ -259,19 +300,57 @@ MatrixF *get_matrix_array(const mxArray *bags, mwSize n, bool mat_alloc=true) {
             mexErrMsgTxt("inconsistent number of columns in bags");
 
         // allocate the result matrix
-        float* data;
+        K* data;
         if (mat_alloc)
-            data = (float*) mxCalloc(rows * cols, sizeof(float));
+            data = (K*) mxCalloc(rows * cols, sizeof(K));
         else
-            data = new float[rows * cols];
-        flann_bags[i] = MatrixF(data, rows, cols);
+            data = new K[rows * cols];
+        flann_bags[i] = Matrix(data, rows, cols);
 
-        if (mxIsDouble(bag))
-            copyIntoFlann<double>(bag, rows, cols, flann_bags[i]);
-        else if (mxIsSingle(bag))
-            copyIntoFlann<float>(bag, rows, cols, flann_bags[i]);
-        else
-            mexErrMsgTxt("unsupported bag type");
+        switch (mxGetClassID(bag)) {
+            case mxINT8_CLASS:
+                copyIntoFlann<int8_T,   K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxUINT8_CLASS:
+                copyIntoFlann<uint8_T,  K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxINT16_CLASS:
+                copyIntoFlann<int16_T,  K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxUINT16_CLASS:
+                copyIntoFlann<uint16_T, K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxINT32_CLASS:
+                copyIntoFlann<int32_T,  K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxUINT32_CLASS:
+                copyIntoFlann<uint32_T, K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxINT64_CLASS:
+                copyIntoFlann<int64_T,  K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxUINT64_CLASS:
+                copyIntoFlann<uint64_T, K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxSINGLE_CLASS:
+                copyIntoFlann<float,    K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            case mxDOUBLE_CLASS:
+                copyIntoFlann<double,   K>(bag, rows, cols, flann_bags[i]);
+                break;
+
+            default:
+                mexErrMsgTxt("unsupported bag type");
+        }
     }
 
     return flann_bags;
@@ -469,7 +548,7 @@ SDM<Scalar> * train(
 {
     // first argument: training bags
     mwSize num_train = mxGetNumberOfElements(bags_m);
-    MatrixF *bags = get_matrix_array(bags_m, num_train, false);
+    MatrixF *bags = get_matrix_array<float>(bags_m, num_train, false);
     // XXX these bags need to live as long as the SDM does, so alloc w/ new
 
     // second argument: labels
@@ -547,11 +626,12 @@ struct CrossValidationOptions : public TrainingOptions {
 
 template <typename Scalar>
 double crossvalidate(
-        const mxArray* bags_m, const mxArray* labels_m, const mxArray* opts_m)
+        const mxArray* bags_m, const mxArray* labels_m, const mxArray* opts_m,
+        const mxArray* divs_m)
 {
     // first argument: bags
     mwSize num = mxGetNumberOfElements(bags_m);
-    MatrixF *bags = get_matrix_array(bags_m, num, true);
+    MatrixF *bags = get_matrix_array<float>(bags_m, num, true);
     // XXX these bags can (and should) die when we exit the function
 
     // second argument: labels
@@ -564,7 +644,7 @@ double crossvalidate(
 
     // third argument: options
     if (!mxIsStruct(opts_m) && mxGetNumberOfElements(opts_m) == 1)
-        mexErrMsgTxt("train 3rd argument must be a single struct");
+        mexErrMsgTxt("crossvalidate options must be a single struct");
     mwSize nfields = mxGetNumberOfFields(opts_m);
 
     CrossValidationOptions opts;
@@ -580,6 +660,21 @@ double crossvalidate(
     if (opts.folds > num)
         opts.folds = num;
 
+    // fourth argument: precomputed divergences
+    double *divs;
+    if (divs_m == NULL) {
+        divs = NULL;
+    } else {
+        if (mxGetNumberOfDimensions(divs_m) != 2 ||
+                mxGetM(divs_m) != num || mxGetN(divs_m) != num) {
+            mexWarnMsgTxt("precomputed divergences not n x n; ignoring them");
+            divs = NULL;
+        } else {
+            divs = (double*) mxCalloc(num * num, sizeof(double));
+            MatrixD divs_f = get_matrix(divs_m, divs);
+        }
+    }
+
     double acc;
     try {
         // train away!
@@ -592,7 +687,8 @@ double crossvalidate(
                 opts.cv_threads,
                 opts.getCvals(),
                 opts.getSVMParams(),
-                opts.tuning_folds);
+                opts.tuning_folds,
+                divs);
 
     } catch (...) {
         delete kernel_group; delete div_func;
@@ -602,6 +698,8 @@ double crossvalidate(
     delete kernel_group;
     delete div_func;
     free_matalloced_matrix_array(bags, num);
+    if (divs != NULL)
+        mxFree(divs);
 
     return acc;
 }
@@ -621,7 +719,7 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         SDMF *model = convertMat2Ptr<SDMF>(prhs[1])->getPointer();
 
         mwSize n = mxGetNumberOfElements(prhs[2]);
-        flann::Matrix<float> *test_bags = get_matrix_array(prhs[2], n);
+        MatrixF *test_bags = get_matrix_array<float>(prhs[2], n);
         // these are allocated by matlab, so will die on mex exit
 
         if (nlhs == 2) {
@@ -670,10 +768,13 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
         plhs[3] = mxCreateDoubleScalar(model->getSVM()->param.C);
 
     } else if (op == "crossvalidate") {
-        if (nrhs != 4) mexErrMsgTxt("crossvalidate takes exactly 3 arguments");
+        if (nrhs < 4 || nrhs > 5)
+            mexErrMsgTxt("crossvalidate takes 3-4 arguments");
         if (nlhs != 1) mexErrMsgTxt("crossvalidate returns exactly 1 output");
 
-        double acc = crossvalidate<float>(prhs[1], prhs[2], prhs[3]);
+        const mxArray* divs = (nrhs >= 5 && !mxIsEmpty(prhs[4])) ?
+                              prhs[4] : NULL;
+        double acc = crossvalidate<float>(prhs[1], prhs[2], prhs[3], divs);
         plhs[0] = mxCreateDoubleScalar(acc);
 
     }  else {
