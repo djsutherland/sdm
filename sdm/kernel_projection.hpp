@@ -34,6 +34,11 @@
 
 namespace sdm {
 
+/* Symmetrizes a matrix in-place by adding it to its transpose and dividing by
+ * two.
+ */
+void symmetrize(double* matrix, size_t n);
+
 /* Takes an n x n matrix stored as a flat array, symmetrizes it, and projects
  * in-place to the nearest positive semidefinite matrix.
  */

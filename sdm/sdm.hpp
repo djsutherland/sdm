@@ -325,6 +325,9 @@ SDM<Scalar> * train_sdm(
         npdivs::alloc_matrix_array<double>(1, num_train, num_train);
     np_divs(train_bags, num_train, div_func, divs, div_params, false);
 
+    // symmetrize divergence estimates
+    symmetrize(divs[0].ptr(), num_train);
+
     // ask the kernel group for the kernels we'll pick from for tuning
     const boost::ptr_vector<Kernel>* kernels =
         kernel_group.getTuningVector(divs->ptr(), num_train);
@@ -404,27 +407,29 @@ std::vector<int> SDM<Scalar>::predict(
 const {
     // TODO: np_divs option to compute things both ways and/or save trees
     // TODO: only compute divergences from support vectors
-    double fwd_data[num_train * num_test];
-    flann::Matrix<double> forward(fwd_data, num_train, num_test);
+    double *div_data = new double[num_test * num_train];
+    flann::Matrix<double> divs(div_data, num_test, num_train);
 
-    double bwd_data[num_test * num_train];
-    flann::Matrix<double> backward(bwd_data, num_test, num_train);
+    double *div_data_oth = new double[num_train * num_test];
+    flann::Matrix<double> divs_oth(div_data_oth, num_train, num_test);
 
     // compute divergences
-    npdivs::np_divs(train_bags, num_train, test_bags, num_test,
-            *div_func, &forward, div_params);
     npdivs::np_divs(test_bags, num_test, train_bags, num_train,
-            *div_func, &backward, div_params);
+            *div_func, &divs, div_params);
+    npdivs::np_divs(train_bags, num_train, test_bags, num_test,
+            *div_func, &divs_oth, div_params);
 
-    // pass through the kernel
-    kernel->transformDivergences(forward.ptr(), num_train, num_test);
-    kernel->transformDivergences(backward.ptr(), num_test, num_train);
-
-    // we can't project here, so we just symmetrize
-    // TODO - symmetrize divergence estimates or kernel estimates?
+    // symmetrize divergence estimates
     for (size_t i = 0; i < num_test; i++)
         for (size_t j = 0; j < num_train; j++)
-            backward[i][j] = (forward[j][i] + backward[i][j]) / 2.0;
+            divs[i][j] = (divs_oth[j][i] + divs[i][j]) / 2.0;
+
+    delete[] div_data_oth;
+
+    // pass through the kernel
+    kernel->transformDivergences(divs.ptr(), num_test, num_train);
+
+    // can't project because it's not square...
 
     // figure out which prediction function we want to use
     bool do_prob = svm_check_probability_model(&svm);
@@ -451,7 +456,7 @@ const {
         // fill in our kernel evaluations
         kernel_row[0].value = -i - 1;
         for (size_t j = 0; j < num_train; j++)
-            kernel_row[j+1].value = backward[i][j];
+            kernel_row[j+1].value = divs[i][j];
 
         // get space to store our decision/probability values
         vals[i].resize(num_vals);
@@ -460,6 +465,8 @@ const {
         double res = pred_fn(&svm, kernel_row, &vals[i][0]);
         pred_labels[i] = (int) std::floor(res + .5);
     }
+
+    delete[] div_data;
 
     return pred_labels;
 }
@@ -689,6 +696,9 @@ double crossvalidate(
     flann::Matrix<double>* divs =
         npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
     np_divs(bags, num_bags, div_func, divs, div_params, false);
+
+    // symmetrize divergence estimates
+    symmetrize(divs[0].ptr(), num_bags);
 
     // ask for the list of kernels to choose from
     const boost::ptr_vector<Kernel> *kernels =
