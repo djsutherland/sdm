@@ -33,7 +33,9 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+
 #include <boost/format.hpp>
+#include <boost/throw_exception.hpp>
 
 #include "sdm/kernel_projection.hpp"
 
@@ -90,10 +92,10 @@ void eig(double* matrix, int n, double* vals, double* vecs, char jobz='V') {
     delete[] work;
 
     if (info < 0) {
-        throw std::domain_error(
-            (format("problem with dsyev argument %d") % (-info)).str());
+        BOOST_THROW_EXCEPTION(std::domain_error(
+            (format("problem with dsyev argument %d") % (-info)).str()));
     } else if (info > 0) {
-        throw std::domain_error("dsyev: failed to converge");
+        BOOST_THROW_EXCEPTION(std::domain_error("dsyev: failed to converge"));
     }
 }
 
@@ -258,9 +260,9 @@ void project_to_covariance(double* matrix, size_t n, size_t steps, double tol) {
         // make sure we don't have any too-negative eigenvalues
         eig(matrix, n, eigvals);
         if (eigvals[0] < tol) {
-            throw std::domain_error(
+            BOOST_THROW_EXCEPTION(std::domain_error(
                     (format("Failed to project to kernel matrix: min eig %g")
-                     % eigvals[0]).str());
+                     % eigvals[0]).str()));
         }
 
     } catch (...) { // fake a finally block

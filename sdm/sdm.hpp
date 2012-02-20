@@ -47,6 +47,7 @@
 #include <vector>
 
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/exception_ptr.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <boost/thread.hpp>
 #include <boost/utility.hpp>
@@ -281,7 +282,8 @@ namespace detail {
     T pick_rand(std::vector<T> vec) {
         size_t n = vec.size();
         if (n == 0) {
-            throw std::domain_error("picking from empty vector");
+            BOOST_THROW_EXCEPTION(std::length_error(
+                        "picking from empty vector"));
         } else if (n == 1) {
             return vec[0];
         } else {
@@ -351,9 +353,10 @@ SDM<Scalar> * train_sdm(
         double* divs)
 {
     if (c_vals.size() == 0) {
-        throw std::domain_error("c_vals is empty");
+        BOOST_THROW_EXCEPTION(std::length_error("c_vals is empty"));
     } else if (labels.size() != num_train) {
-        throw std::domain_error("labels.size() disagrees with num_train");
+        BOOST_THROW_EXCEPTION(std::length_error(
+                    "labels.size() disagrees with num_train"));
     }
 
     // copy the svm params so we can change them
@@ -422,7 +425,7 @@ SDM<Scalar> * train_sdm(
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
         FILE_LOG(logERROR) << "LibSVM parameter error: " << error;
-        throw std::domain_error(error);
+        BOOST_THROW_EXCEPTION(std::domain_error(error));
     }
 
     // train away!
@@ -568,6 +571,8 @@ protected:
     boost::mutex &results_mutex;
     size_t &total_correct;
 
+    boost::exception_ptr &error;
+
 public:
     cv_worker(
         const flann::Matrix<Scalar> *bags,
@@ -584,35 +589,42 @@ public:
         boost::mutex &jobs_mutex,
         std::queue<size_pair> &jobs,
         boost::mutex &results_mutex,
-        size_t &total_correct)
+        size_t &total_correct,
+        boost::exception_ptr &error)
     :
         bags(bags), num_bags(num_bags), labels(labels), div_func(div_func),
         kernels(kernels), divs(divs), svm_params(svm_params),
         c_vals(c_vals), tuning_folds(tuning_folds),
         project_all_data(project_all_data), div_params(div_params),
         jobs_mutex(jobs_mutex), jobs(jobs),
-        results_mutex(results_mutex), total_correct(total_correct)
+        results_mutex(results_mutex), total_correct(total_correct),
+        error(error)
     {}
 
     void operator()() {
         size_pair job;
         size_t num_correct = 0;
 
-        while (true) {
-            { // get a job
-                boost::mutex::scoped_lock the_lock(jobs_mutex);
-                if (jobs.size() == 0)
-                    break;
-                job = jobs.front();
-                jobs.pop();
+        try {
+            while (true) {
+                { // get a job
+                    boost::mutex::scoped_lock the_lock(jobs_mutex);
+                    if (jobs.size() == 0)
+                        break;
+                    job = jobs.front();
+                    jobs.pop();
+                }
+
+                num_correct += do_job(job.first, job.second);
             }
 
-            num_correct += do_job(job.first, job.second);
-        }
-
-        { // write the result
-            boost::mutex::scoped_lock the_lock(results_mutex);
-            total_correct += num_correct;
+            { // write the result
+                boost::mutex::scoped_lock the_lock(results_mutex);
+                total_correct += num_correct;
+            }
+        } catch (...) {
+            error = boost::current_exception();
+            return;
         }
     }
 
@@ -690,7 +702,7 @@ public:
         const char* error = svm_check_parameter(&prob, &svm_params);
         if (error != NULL) {
             FILE_LOG(logERROR) << "LibSVM parameter error: " << error;
-            throw std::domain_error(error);
+            BOOST_THROW_EXCEPTION(std::domain_error(error));
         }
 
         // train!
@@ -753,11 +765,11 @@ double crossvalidate(
     if (folds == 0) {
         folds = num_bags;
     } else if (folds == 1) {
-        throw std::domain_error((boost::format(
-                    "Can't cross-validate with %d folds...") % folds).str());
+        BOOST_THROW_EXCEPTION(std::domain_error((boost::format(
+                    "Can't cross-validate with %d folds...") % folds).str()));
     } else if (folds > num_bags) {
-        throw std::domain_error((boost::format(
-            "Can't use %d folds with only %d bags.") % folds % num_bags).str());
+        BOOST_THROW_EXCEPTION(std::domain_error((boost::format(
+           "Can't use %d folds with only %d bags.") % folds % num_bags).str()));
     }
 
     // copy the svm params so we can change them
@@ -808,10 +820,11 @@ double crossvalidate(
     if (num_cv_threads <= 1) {
         // don't actually launch separate threads, 'tis a waste
 
+        boost::exception_ptr error;
         detail::cv_worker<Scalar> worker(bags, num_bags, labels, &div_func,
                 kernels, divs, svm_p, c_vals, tuning_folds,
                 project_all_data, pred_div_params, jobs_mutex, jobs,
-                results_mutex, num_correct);
+                results_mutex, num_correct, error);
 
         for (size_t fold = 0; fold < folds; fold++) {
             size_t test_start = fold * num_test;
@@ -832,6 +845,7 @@ double crossvalidate(
         // keep worker objects in this ptr_vector to avoid copying but also
         // have them be destroyed when appropriate
         boost::ptr_vector< detail::cv_worker<Scalar> > workers;
+        std::vector<boost::exception_ptr> errors(num_cv_threads);
 
         boost::thread_group worker_threads;
 
@@ -839,12 +853,15 @@ double crossvalidate(
             workers.push_back(new detail::cv_worker<Scalar>(
                 bags, num_bags, labels, &div_func, kernels, divs,
                 svm_p, c_vals, tuning_folds, project_all_data, pred_div_params,
-                jobs_mutex, jobs, results_mutex, num_correct
+                jobs_mutex, jobs, results_mutex, num_correct, errors[i]
             ));
             worker_threads.create_thread(boost::ref(workers[i]));
         }
 
         worker_threads.join_all();
+        for (size_t i = 0; i < num_cv_threads; i++)
+            if (errors[i])
+                boost::rethrow_exception(errors[i]);
     }
 
     // clean up

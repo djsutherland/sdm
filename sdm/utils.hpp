@@ -36,6 +36,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <boost/throw_exception.hpp>
+
 namespace sdm {
 
 /* Finds the median of a vector with numeric type, reordering the vector
@@ -47,7 +49,7 @@ double median(std::vector<T> &vec) {
     size_t mid = n / 2;
 
     if (n == 0) {
-        throw std::domain_error("median of an empty list");
+        BOOST_THROW_EXCEPTION(std::length_error("median of an empty list"));
     }
 
     std::nth_element(vec.begin(), vec.begin() + mid, vec.end());

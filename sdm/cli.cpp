@@ -46,6 +46,7 @@
 #include <boost/bind.hpp>
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
+#include <boost/throw_exception.hpp>
 #include <boost/utility.hpp>
 
 #include <flann/flann.hpp>
@@ -99,8 +100,8 @@ struct ProgOpts : boost::noncopyable {
         } else if (name == "polynomial") {
             kernel_group = new sdm::PolynomialKernelGroup;
         } else {
-            throw std::domain_error((
-                        boost::format("unknown kernel type %s") % name).str());
+            BOOST_THROW_EXCEPTION(std::domain_error((
+                        boost::format("unknown kernel type %s") % name).str()));
         }
     }
 
@@ -115,8 +116,8 @@ struct ProgOpts : boost::noncopyable {
             index_params = ps;
 
         } else {
-            throw std::domain_error((
-                        boost::format("unknown index type %s") % name).str());
+            BOOST_THROW_EXCEPTION(std::domain_error((
+                        boost::format("unknown index type %s") % name).str()));
         }
     }
 };

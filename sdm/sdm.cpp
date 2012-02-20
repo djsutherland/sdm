@@ -37,6 +37,7 @@
 #include <utility>
 #include <vector>
 
+#include <boost/exception_ptr.hpp>
 #include <boost/format.hpp>
 #include <boost/thread.hpp>
 
@@ -237,6 +238,7 @@ namespace detail {
         const size_t folds;
         std::vector<config> *results;
         size_t *num_correct;
+        boost::exception_ptr &error;
 
     public:
         tune_params_worker(
@@ -249,18 +251,23 @@ namespace detail {
             const svm_parameter &svm_params,
             const size_t folds,
             std::vector<config> *results,
-            size_t *num_correct)
+            size_t *num_correct,
+            boost::exception_ptr &error)
         :
             divs(divs), num_bags(num_bags), labels(labels),
             kernels(kernels), num_kernels(num_kernels), c_vals(c_vals),
             svm_params(svm_params), folds(folds),
-            results(results), num_correct(num_correct)
+            results(results), num_correct(num_correct), error(error)
         {}
 
         void operator()() {
-            *results = tune_params_single(divs, num_bags, labels,
-                    kernels, num_kernels, c_vals,
-                    svm_params, folds, num_correct);
+            try {
+                *results = tune_params_single(divs, num_bags, labels,
+                        kernels, num_kernels, c_vals,
+                        svm_params, folds, num_correct);
+            } catch (...) {
+                error = boost::current_exception();
+            }
         }
     };
 
@@ -285,7 +292,8 @@ namespace detail {
         size_t num_kernels = kernels.size();
 
         if (num_kernels == 0) {
-            throw std::domain_error("no kernels in the kernel group");
+            BOOST_THROW_EXCEPTION(std::domain_error(
+                        "no kernels in the kernel group"));
         } else if (num_kernels == 1 && c_vals.size() == 1) {
             // only one option, we already know what's best
             return config(0, 0);
@@ -313,6 +321,7 @@ namespace detail {
 
         // grunt work to set up multithreading
         boost::ptr_vector<tune_params_worker> workers;
+        std::vector<boost::exception_ptr> errors(num_threads);
         boost::thread_group worker_threads;
 
         std::vector< std::vector<config> > results(num_threads);
@@ -332,7 +341,8 @@ namespace detail {
                         divs, num_bags, labels,
                         kern_array + kern_start, n_kerns,
                         c_vals, svm_params, folds,
-                        &results[i], &nums_correct[i]
+                        &results[i], &nums_correct[i],
+                        errors[i]
             ));
 
             worker_threads.create_thread(boost::ref(workers[i]));
@@ -340,6 +350,9 @@ namespace detail {
             kern_start += kerns_per_thread;
         }
         worker_threads.join_all();
+        for (size_t i = 0; i < num_threads; i++)
+            if (errors[i])
+                boost::rethrow_exception(errors[i]);
 
         // get all the best configs into one vector
         size_t best_correct = *std::max_element(
