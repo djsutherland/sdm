@@ -293,9 +293,8 @@ namespace detail {
     }
 
     template <typename T>
-    std::string matrixToString(T* mat, size_t rows, size_t cols) {
-        using std::stringstream;
-        stringstream ss (stringstream::in | stringstream::out);
+    std::string matrixToString(const T* mat, size_t rows, size_t cols) {
+        std::stringstream ss (std::stringstream::in);
 
         ss << std::setprecision(8);
         for (size_t i = 0; i < rows; i++) {
@@ -307,7 +306,7 @@ namespace detail {
     }
 
     template <typename T>
-    std::string matrixToString(flann::Matrix<T> mat) {
+    std::string matrixToString(const flann::Matrix<T> &mat) {
         return matrixToString(mat.ptr(), mat.rows, mat.cols);
     }
 }
@@ -416,7 +415,7 @@ SDM<Scalar> * train_sdm(
     // check svm parameters
     const char* error = svm_check_parameter(prob, &svm_p);
     if (error != NULL) {
-        std::cerr << "LibSVM parameter error: " << error << std::endl;
+        FILE_LOG(logERROR) << "LibSVM parameter error: " << error;
         throw std::domain_error(error);
     }
 
@@ -682,7 +681,7 @@ public:
         // check svm params
         const char* error = svm_check_parameter(&prob, &svm_params);
         if (error != NULL) {
-            std::cerr << "LibSVM parameter error: " << error << std::endl;
+            FILE_LOG(logERROR) << "LibSVM parameter error: " << error;
             throw std::domain_error(error);
         }
 
