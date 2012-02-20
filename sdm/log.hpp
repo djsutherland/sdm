@@ -7,7 +7,10 @@
 #include <string>
 #include <stdio.h>
 
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 103500
 #include <boost/thread.hpp>
+#endif
 
 inline std::string NowTime();
 
@@ -41,7 +44,9 @@ template <typename T>
 std::ostringstream& Log<T>::Get(TLogLevel level)
 {
     os << "- " << NowTime();
+#if BOOST_VERSION >= 103500
     os << " [" << boost::this_thread::get_id() << "]";
+#endif
     os << " " << ToString(level) << ": ";
     os << std::string(level > logDEBUG ? level - logDEBUG : 0, '\t');
     return os;
