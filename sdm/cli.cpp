@@ -131,6 +131,10 @@ int main(int argc, char ** argv) {
         if (!parse_args(argc, argv, opts))
             return 1;
 
+        // TODO: configurable logging
+        FILELog::ReportingLevel() = logDEBUG2;
+        // Output2FILE::Stream() = stderr;
+
         // TODO: gracefully handle nonexisting files
         // TODO: more robust input checking
 

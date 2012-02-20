@@ -33,16 +33,20 @@
 #include "sdm/basics.hpp"
 #include "sdm/kernels/kernel.hpp"
 #include "sdm/kernel_projection.hpp"
+#include "sdm/log.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <ios>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <boost/thread.hpp>
 #include <boost/utility.hpp>
@@ -52,6 +56,7 @@
 #include <np-divs/np_divs.hpp>
 #include <flann/util/matrix.h>
 #include <svm.h>
+
 
 namespace sdm {
 
@@ -249,7 +254,10 @@ namespace detail {
 
     // don't actually print the argument
     // TODO: real logging
-    void print_null(const char *s);
+    template <TLogLevel tl>
+    void log(const char *s) {
+        FILE_LOG(tl) << boost::trim_copy(std::string(s));
+    }
 
     // see whether a kernel is just so horrendous we shouldn't bother
     bool terrible_kernel(double* km, size_t n, double const_thresh=1e-4);
@@ -282,6 +290,25 @@ namespace detail {
             std::srand(std::time(NULL));
             return vec[std::rand() % n];
         }
+    }
+
+    template <typename T>
+    std::string matrixToString(T* mat, size_t rows, size_t cols) {
+        using std::stringstream;
+        stringstream ss (stringstream::in | stringstream::out);
+
+        ss << std::setprecision(8);
+        for (size_t i = 0; i < rows; i++) {
+            for (size_t j = 0; j < cols; j++)
+                ss << "\t" << mat[i*cols + j];
+            ss << "\n";
+        }
+        return ss.str();
+    }
+
+    template <typename T>
+    std::string matrixToString(flann::Matrix<T> mat) {
+        return matrixToString(mat.ptr(), mat.rows, mat.cols);
     }
 }
 
@@ -336,7 +363,7 @@ SDM<Scalar> * train_sdm(
     svm_p.kernel_type = PRECOMPUTED;
 
     // make libSVM shut up  -  TODO real logging
-    svm_set_print_string_function(&detail::print_null);
+    svm_set_print_string_function(&detail::log<logDEBUG4>);
 
     // first compute divergences, if necessary
     bool free_divs = false;
@@ -370,6 +397,9 @@ SDM<Scalar> * train_sdm(
     // compute the final kernel matrix
     kernel->transformDivergences(divs, num_train);
     project_to_symmetric_psd(divs, num_train);
+
+    FILE_LOG(logDEBUG2) << "train: final kernel matrix is:\n" <<
+        detail::matrixToString(divs, num_train, num_train);
 
     // set up the svm_problem
     svm_problem *prob = new svm_problem;
@@ -672,6 +702,10 @@ public:
             if (preds[i] == labels[test_start + i])
                 num_correct++;
 
+        FILE_LOG(logINFO) << "CV " << test_start << " - " << test_end
+            << ": " << num_correct << "/" << num_test << " correct by "
+            << kernel.name() << ", C=" << svm_p.C;
+
         // clean up
         delete[] train_km;
         delete[] test_km;
@@ -725,7 +759,7 @@ double crossvalidate(
     svm_p.kernel_type = PRECOMPUTED;
 
     // make libSVM shut up  -  TODO real logging
-    svm_set_print_string_function(&detail::print_null);
+    svm_set_print_string_function(&detail::log<logDEBUG4>);
 
     // calculate the full matrix of divergences if necessary
     bool free_divs = false;

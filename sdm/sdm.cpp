@@ -105,8 +105,6 @@ namespace detail {
         }
     }
 
-    void print_null(const char *s) {}
-
     // see whether a kernel is just so horrendous we shouldn't bother
     bool terrible_kernel(double* km, size_t n, double const_thresh) {
         const double l = n*n;
@@ -121,8 +119,8 @@ namespace detail {
                 break;
             }
         }
-        if (is_const) { // TODO: real logging
-            //fprintf(stderr, "Skipping tuning over constant kernel matrix\n");
+        if (is_const) {
+            FILE_LOG(logDEBUG2) << "near-constant kernel";
             return true;
         }
 
@@ -178,8 +176,11 @@ namespace detail {
             project_to_symmetric_psd(km, num_bags);
 
             // is it a constant matrix or something else awful?
-            if (num_kernels != 1 && terrible_kernel(km, num_bags))
+            if (num_kernels != 1 && terrible_kernel(km, num_bags)) {
+                FILE_LOG(logDEBUG1) << "tuning: skipping terrible kernel "
+                    << kernels[k]->name();
                 continue;
+            }
 
             // store in the svm_problem
             store_kernel_matrix(*prob, km, false);
@@ -193,6 +194,11 @@ namespace detail {
                 for (size_t i = 0; i < num_bags; i++)
                     if (cv_labels[i] == labels[i])
                         num_correct++;
+
+                FILE_LOG(logDEBUG2) << "tuning: " <<
+                    num_correct << "/" << num_bags <<
+                    " by " << kernels[k]->name() << ", C = " << c_vals[ci];
+
 
                 if (num_correct >= best_correct) {
                     if (num_correct > best_correct) {

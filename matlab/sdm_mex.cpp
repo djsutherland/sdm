@@ -870,6 +870,9 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     // first arg is a string saying what the desired operation is
     string op = get_string(prhs[0], "first input must be a string");
 
+    // TODO: configure logging
+    FILELog::ReportingLevel() = logDEBUG2;
+
     if (op == "predict") {
         if (nrhs < 3 || nrhs > 4) mexErrMsgTxt("predict takes 2-3 arguments");
         if (nlhs < 1 || nlhs > 2) mexErrMsgTxt("predict returns 1-2 values");
