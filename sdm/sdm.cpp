@@ -199,7 +199,6 @@ namespace detail {
                     num_correct << "/" << num_bags <<
                     " by " << kernels[k]->name() << ", C = " << c_vals[ci];
 
-
                 if (num_correct >= best_correct) {
                     if (num_correct > best_correct) {
                         best_configs.clear();
@@ -347,10 +346,17 @@ namespace detail {
                 nums_correct.begin(), nums_correct.end());
         std::vector<config> best_configs;
 
-        for (size_t i = 0; i < num_threads; i++)
-            if (nums_correct[i] == best_correct)
-                best_configs.insert(best_configs.end(),
-                        results[i].begin(), results[i].end());
+        kern_start = 0;
+        for (size_t i = 0; i < num_threads; i++) {
+            if (nums_correct[i] == best_correct) {
+                for (size_t j = 0; j < results[i].size(); j++) {
+                    config cfg = results[i][j];
+                    best_configs.push_back(
+                            config(cfg.first + kern_start, cfg.second));
+                }
+            }
+            kern_start += kerns_per_thread;
+        }
 
         return pick_rand(best_configs);
     }
