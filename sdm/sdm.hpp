@@ -253,7 +253,6 @@ namespace detail {
     void store_kernel_matrix(svm_problem &prob, const double *divs, bool alloc);
 
     // don't actually print the argument
-    // TODO: real logging
     template <TLogLevel tl>
     void log(const char *s) {
         FILE_LOG(tl) << boost::trim_copy(std::string(s));
@@ -294,7 +293,7 @@ namespace detail {
 
     template <typename T>
     std::string matrixToString(const T* mat, size_t rows, size_t cols) {
-        std::stringstream ss (std::stringstream::in);
+        std::stringstream ss (std::stringstream::in | std::stringstream::out);
 
         ss << std::setprecision(8);
         for (size_t i = 0; i < rows; i++) {
@@ -309,6 +308,8 @@ namespace detail {
     std::string matrixToString(const flann::Matrix<T> &mat) {
         return matrixToString(mat.ptr(), mat.rows, mat.cols);
     }
+
+    std::string SVMtoString(const svm_model &model);
 }
 
 template <typename Scalar>
@@ -348,8 +349,7 @@ SDM<Scalar> * train_sdm(
         const svm_parameter &svm_params,
         size_t tuning_folds,
         double* divs)
-{   // TODO - logging
-
+{
     if (c_vals.size() == 0) {
         throw std::domain_error("c_vals is empty");
     } else if (labels.size() != num_train) {
@@ -361,12 +361,14 @@ SDM<Scalar> * train_sdm(
     svm_p.svm_type = C_SVC;
     svm_p.kernel_type = PRECOMPUTED;
 
-    // make libSVM shut up  -  TODO real logging
+    // make libSVM log properly
     svm_set_print_string_function(&detail::log<logDEBUG4>);
 
     // first compute divergences, if necessary
     bool free_divs = false;
     if (divs == NULL) {
+        FILE_LOG(logINFO) << "train: computing divergences";
+
         flann::Matrix<double>* divs_f =
             npdivs::alloc_matrix_array<double>(1, num_train, num_train);
         np_divs(train_bags, num_train, div_func, divs_f, div_params, false);
@@ -384,6 +386,7 @@ SDM<Scalar> * train_sdm(
         kernel_group.getTuningVector(divs, num_train);
 
     // tuning: cross-validate over possible svm/kernel parameters
+    FILE_LOG(logINFO) << "train: tuning parameters";
     const std::pair<size_t, size_t> &best_config =
         detail::tune_params(divs, num_train, labels, *kernels,
                 c_vals, svm_p, tuning_folds, div_params.num_threads);
@@ -393,11 +396,14 @@ SDM<Scalar> * train_sdm(
     svm_p.C = c_vals[best_config.second];
     delete kernels; // FIXME: potential leaks in here if something crashes
 
+    FILE_LOG(logINFO) << "train: using " << kernel->name() <<
+        "; C = " << c_vals[best_config.second];
+
     // compute the final kernel matrix
     kernel->transformDivergences(divs, num_train);
     project_to_symmetric_psd(divs, num_train);
 
-    FILE_LOG(logDEBUG2) << "train: final kernel matrix is:\n" <<
+    FILE_LOG(logDEBUG3) << "train: final kernel matrix is:\n" <<
         detail::matrixToString(divs, num_train, num_train);
 
     // set up the svm_problem
@@ -420,7 +426,9 @@ SDM<Scalar> * train_sdm(
     }
 
     // train away!
+    FILE_LOG(logINFO) << "train: training SVM";
     svm_model *svm = svm_train(prob, &svm_p);
+    FILE_LOG(logDEBUG2) << "train: final SVM:\n" << detail::SVMtoString(*svm);
 
     SDM<Scalar>* sdm = new SDM<Scalar>(*svm, *prob, div_func, *kernel,
             div_params, svm_get_nr_class(svm), train_bags, num_train);
@@ -757,7 +765,7 @@ double crossvalidate(
     svm_p.svm_type = C_SVC;
     svm_p.kernel_type = PRECOMPUTED;
 
-    // make libSVM shut up  -  TODO real logging
+    // make libSVM log properly
     svm_set_print_string_function(&detail::log<logDEBUG4>);
 
     // calculate the full matrix of divergences if necessary

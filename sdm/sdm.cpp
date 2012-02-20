@@ -391,6 +391,62 @@ namespace detail {
                 dest[dest_row + j - num_test] = source[full_row + j];
         }
     }
-}
 
-} // end namespace
+    std::string SVMtoString(const svm_model &model) {
+        std::stringstream ss (std::stringstream::in | std::stringstream::out);
+
+        int n = model.nr_class;
+        int l = model.l;
+        int n_choose_two = (n * (n-1)) / 2;
+
+        ss << "nr_class: " << n << "; # SV: " << l << "\n";
+        ss << "rho:";
+        for (int i = 0; i < n_choose_two; i++)
+            ss << " " << model.rho[i];
+        ss << "\n";
+
+        if (model.label != NULL) {
+            ss << "labels:";
+            for (int i = 0; i < n; i++)
+                ss << " " << model.label[i];
+            ss << "\n";
+        }
+
+        if (model.probA != NULL) {
+            ss << "probA:";
+            for (int i = 0; i < n_choose_two; i++)
+                ss << " " << model.probA[i];
+            ss << "\n";
+        }
+
+        if (model.probB != NULL) {
+            ss << "probB:";
+            for (int i = 0; i < n_choose_two; i++)
+                ss << " " << model.probB[i];
+            ss << "\n";
+        }
+
+        if (model.nSV) {
+            ss << "nSVs:";
+            for (int i = 0; i < n; i++)
+                ss << " " << model.nSV[i];
+            ss << "\n";
+        }
+
+        ss << "sv_coef:\n";
+        for (int i = 0; i < n - 1; i++) {
+            for (int j = 0; j < l; j++) {
+                ss << " " << model.sv_coef[i][j];
+            }
+            ss << "\n";
+        }
+        ss << "\n";
+
+        ss << "not printing SVs out of laziness\n";
+
+        return ss.str();
+    }
+
+} // end namespace detail
+
+} // end namespace sdm
