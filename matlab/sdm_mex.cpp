@@ -887,14 +887,14 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
         double *divs = NULL;
         if (nrhs >= 4) {
-            if (mxGetNumberOfDimensions(prhs[4]) != 2 ||
-                    mxGetM(prhs[4]) != n ||
-                    mxGetN(prhs[4]) != num_train) {
+            if (mxGetNumberOfDimensions(prhs[3]) != 2 ||
+                    mxGetM(prhs[3]) != n ||
+                    mxGetN(prhs[3]) != num_train) {
                 mexWarnMsgTxt("precomputed divergences not n_test x n_train; "
                               "ignoring them");
             } else {
                 divs = (double*) mxCalloc(n * num_train, sizeof(double));
-                get_matrix(prhs[4], divs);
+                get_matrix(prhs[3], divs);
             }
         }
 
