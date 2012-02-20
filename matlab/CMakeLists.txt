@@ -77,7 +77,7 @@ if (MEX_CMD AND MEXEXT_CMD)
         get_property(sdm_s_location TARGET sdm_s PROPERTY LOCATION)
         list(APPEND MEX_ARGS
             ${sdm_s_location}
-            ${Boost_THREAD_LIBRARY}
+            ${Boost_THREAD_STATIC_LIBRARY}
             ${LIBSVM_LIBRARIES}
             ${CMAKE_THREAD_LIBS_INIT})
 
