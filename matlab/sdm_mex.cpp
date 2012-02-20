@@ -38,6 +38,7 @@
  */
 
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -972,11 +973,19 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 }
 
 void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
+    FILE* log_fd;
     try {
+        log_fd = std::fopen("logfile.txt", "a");
+        Output2FILE::Stream() = log_fd;
+
         dispatch(nlhs, plhs, nrhs, prhs);
+
+        std::fclose(log_fd);
     } catch (std::exception &e) {
+        std::fclose(log_fd);
         mexErrMsgTxt((boost::format("exception: %s") % e.what()).str().c_str());
     } catch (...) {
+        std::fclose(log_fd);
         mexErrMsgTxt("unknown error in sdm_mex");
     }
 }
