@@ -428,7 +428,7 @@ SDM<Scalar> * train_sdm(
     // train away!
     FILE_LOG(logINFO) << "train: training SVM";
     svm_model *svm = svm_train(prob, &svm_p);
-    FILE_LOG(logDEBUG2) << "train: final SVM:\n" << detail::SVMtoString(*svm);
+    FILE_LOG(logDEBUG3) << "train: final SVM:\n" << detail::SVMtoString(*svm);
 
     SDM<Scalar>* sdm = new SDM<Scalar>(*svm, *prob, div_func, *kernel,
             div_params, svm_get_nr_class(svm), train_bags, num_train);
