@@ -255,7 +255,7 @@ classdef SDM < handle
             %         num_threads: the number of threads to use in calculation.
             %              0 (the default) means one per core.
 
-            if nargin < 3; options = struct(); end
+            if nargin < 3; opts = struct(); end
             if nargin < 2; y_bags = []; end
 
             Ds = sdm_mex('npdivs', x_bags, y_bags, opts);
