@@ -69,7 +69,7 @@ namespace detail {
     const double coef0s[1] = { 1 };
 }
 const std::vector<size_t> default_degrees(detail::degs, detail::degs + 7);
-const std::vector<double> default_coef0s(detail::coef0s, detail::coef0s + 2);
+const std::vector<double> default_coef0s(detail::coef0s, detail::coef0s + 1);
 
 
 class PolynomialKernelGroup : public KernelGroup {
