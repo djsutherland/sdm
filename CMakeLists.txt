@@ -51,8 +51,26 @@ include_directories(${LIBSVM_INCLUDE_DIRS})
 
 find_package(Threads)
 
-find_package(Boost COMPONENTS thread program_options REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
+# let user override boost paths
+set(BOOST_HEADERS CACHE PATH "Header directory for libraries")
+set(BOOST_THREAD CACHE PATH "Path to Boost Thread library")
+set(BOOST_PROGRAM_OPTIONS CACHE PATH "Path to Boost Program Options library")
+
+if(BOOST_HEADERS AND BOOST_THREAD AND BOOST_PROGRAM_OPTIONS)
+else()
+    find_package(Boost 1.35 COMPONENTS thread program_options REQUIRED)
+
+    if(NOT BOOST_HEADERS)
+        set(BOOST_HEADERS ${Boost_INCLUDE_DIRS})
+    endif()
+    if (NOT BOOST_THREAD)
+        set(BOOST_THREAD ${Boost_THREAD_LIBRARY})
+    endif()
+    if (NOT BOOST_PROGRAM_OPTIONS)
+        set(BOOST_PROGRAM_OPTIONS ${Boost_PROGRAM_OPTIONS_LIBRARY})
+    endif()
+endif()
+include_directories(${BOOST_HEADERS})
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FLANN REQUIRED flann)

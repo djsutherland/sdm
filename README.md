@@ -14,7 +14,7 @@ Requirements
     divergence estimation
   * [LibSVM](http://www.csie.ntu.edu.tw/~cjlin/libsvm/) for support vector
     machines
-  * [Boost](http://boost.org)
+  * [Boost](http://boost.org) at least 1.35
   * [CMake](http://cmake.org)
   * BLAS and LAPACK implementations
 

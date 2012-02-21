@@ -10,7 +10,7 @@ set(LIBRARY_SOURCES
 set(LIBS
     ${NPDIVS_LIBRARIES}
     ${LIBSVM_LIBRARIES}
-    ${Boost_THREAD_LIBRARY}
+    ${BOOST_THREAD}
     ${BLAS_LIBRARIES}
     ${LAPACK_LIBRARIES}
 )
@@ -27,10 +27,10 @@ endif()
 
 add_executable(sdm-run cli.cpp)
 if(EXE_LINK_SHARED)
-    target_link_libraries(sdm-run sdm ${Boost_PROGRAM_OPTIONS_LIBRARY})
+    target_link_libraries(sdm-run sdm ${BOOST_PROGRAM_OPTIONS})
 else()
     target_link_libraries(sdm-run sdm_s
-        ${LIBS} ${CMAKE_THREAD_LIBS_INIT} ${Boost_PROGRAM_OPTIONS_LIBRARY})
+        ${LIBS} ${CMAKE_THREAD_LIBS_INIT} ${BOOST_PROGRAM_OPTIONS})
 endif()
 
 install(

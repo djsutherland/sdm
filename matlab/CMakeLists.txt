@@ -7,23 +7,59 @@
 # libraries, but doesn't ship headers, we need to be careful not to cross-link.
 #
 # There are a few strategies for doing this:
-#   - Get the headers for the appropriate version of Boost shipped by Matlab.
-#     This is a fairly large download, and on Mac there's not really any way
-#     to tell which version Matlab has.
+#
+#   - Get the headers for the appropriate version of Boost shipped by Matlab
+#     and link all targets against Matlab's Boost.
 #
 #   - Statically link against the system Boost.
 #
-#   - Dynamically link against system Boost, and ensure that LD_LOAD_PATH
-#     or DYLD_LOAD_PATH (on Mac) is set to pick up system Boost before
-#     it gets Matlab's Boost on runtime.
+#   - Dynamically link against system Boost, and ensure that LD_LIBRARY_PATH or
+#     maybe LD_PRELOAD or DYLD_LIBRARY_PATH (on Mac) is set to pick up system
+#     Boost before it gets Matlab's Boost on runtime. This can cause Matlab
+#     itself to crash.
 #
 # Static linking is the easiest approach, but unfortunately there doesn't seem
-# to be a way to find both static and dynamic versions of boost. So we hack it
-# by string-replacing .so/.dylib with .a in Boost_THREAD_LIBRARY.
+# to be a way to find both static and dynamic versions of boost, and not all
+# systems have static versions of Boost with position-independent code. So we
+# hack it by string-replacing .so/.dylib with .a in the path to the primary
+# boost thread. Set the option MEX_BOOST_THREAD to the correct path if this
+# doesn't work for you.
+#
+# If you want to dynamically link against Matlab boost, set BOOST_HEADERS to
+# the location with the appropriate version of the boost headers and set
+# BOOST_THREAD and BOOST_PROGRAM_OPTIONS to point to Matlab's version of those
+# libraries, e.g. /path/to/matlab/bin/glnxa64/libboost_thread.so.1.44.0, as
+# well as setting MEX_DYNAMIC_BOOST to ON.
+#
+# All targets will then be linked against Matlab's version of Boost; you'll
+# probably have to be careful with linking other things against them. On OS X,
+# where Matlab doesn't version-number its distribution of the boost libraries
+# for some reason, you'll have to be especially careful with it attempting
+# to load the system boost, which will probably result in segfaults or
+# hanging-forever behavior.
+
+# TODO: figure out what options there are for np-divs linking to boosts
+
 # TODO: better approach to find static boost
 
 # TODO: support octave
-# TODO: support manually setting paths to mex/mexext
+
+option(MEX_DYNAMIC_BOOST "Use the same boost for MEX as other targets" OFF)
+
+string(REGEX REPLACE "(\\.dylib|\\.so)$" ".a"
+    BOOST_THREAD_STATIC_GUESS "${BOOST_THREAD}")
+
+set(MEX_BOOST_THREAD CACHE PATH
+    "Path to Boost Thread to use for the MEX binary")
+
+if(MEX_BOOST_THREAD)
+    set(MEX_BOOST_THREAD_REAL ${MEX_BOOST_THREAD})
+elseif(MEX_DYNAMIC_BOOST)
+    set(MEX_BOOST_THREAD_REAL ${BOOST_THREAD})
+else()
+    set(MEX_BOOST_THREAD_REAL ${BOOST_THREAD_STATIC_GUESS})
+endif()
+
 
 set(MEX_NAME sdm_mex)
 
@@ -49,16 +85,15 @@ if (MEX_CMD AND MEXEXT_CMD)
             OUTPUT_VARIABLE MEX_EXTENSION OUTPUT_STRIP_TRAILING_WHITESPACE) 
         set(MEX_FILE ${CMAKE_CURRENT_BINARY_DIR}/${MEX_NAME}.${MEX_EXTENSION})
 
-        string(REGEX REPLACE "(\\.dylib|\\.so)$" ".a"
-            Boost_THREAD_STATIC_LIBRARY
-            "${Boost_THREAD_LIBRARY}"
-        )
+        message("Mex: linking against ${MEX_BOOST_THREAD_REAL}")
+        message("Boost thread: ${BOOST_THREAD}")
+        message("Boost program options: ${BOOST_PROGRAM_OPTIONS}")
+        message("Boost headers: ${BOOST_HEADERS}")
 
         set(MEX_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/${MEX_NAME}.cpp" "-g")
 
         # -I args
-        foreach(i ${PROJECT_SOURCE_DIR} ${NPDIVS_INCLUDE_DIRS}
-                ${BOOST_INCLUDE_DIRS})
+        foreach(i ${PROJECT_SOURCE_DIR} ${BOOST_HEADERS} ${NPDIVS_INCLUDE_DIRS})
             list(APPEND MEX_ARGS "-I${i}")
         endforeach(i)
 
@@ -77,7 +112,7 @@ if (MEX_CMD AND MEXEXT_CMD)
         get_property(sdm_s_location TARGET sdm_s PROPERTY LOCATION)
         list(APPEND MEX_ARGS
             ${sdm_s_location}
-            ${Boost_THREAD_STATIC_LIBRARY}
+            ${MEX_BOOST_THREAD_REAL}
             ${LIBSVM_LIBRARIES}
             ${CMAKE_THREAD_LIBS_INIT})
 
