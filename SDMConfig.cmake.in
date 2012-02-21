@@ -14,7 +14,7 @@ else()
         "${SDM_CMAKE_DIR}/@CONF_REL_INCLUDE_DIR@"
         @NPDIVS_INCLUDE_DIRS@
         @LIBSVM_INCLUDE_DIRS@
-        @Boost_INCLUDE_DIRS@
+        @BOOST_HEADERS@
         @FLANN_INCLUDE_DIRS@
         @BLAS_INCLUDE_DIRS@
         @LAPACK_INCLUDE_DIRS@
@@ -23,11 +23,11 @@ else()
         "${SDM_CMAKE_DIR}/@CONF_REL_LIB_DIR@"
         @NPDIVS_LIBRARY_DIRS@
         @LIBSVM_LIBRARY_DIRS@
-        @Boost_LIBRARY_DIRS@
         @FLANN_LIBRARY_DIRS@
         @BLAS_LIBRARY_DIRS@
         @LAPACK_LIBRARY_DIRS@
     )
+# TODO: boost exports?
 endif()
 
 # library dependencies
