@@ -42,6 +42,8 @@
 #include <string>
 #include <vector>
 
+#include <boost/exception/all.hpp>
+#include <boost/format.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
 
 #include <mex.h>
@@ -973,19 +975,22 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 }
 
 void mexFunction(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
-    FILE* log_fd;
+    FILE* log_fd = std::fopen("logfile.txt", "a");
+    Output2FILE::Stream() = log_fd;
+
     try {
-        log_fd = std::fopen("logfile.txt", "a");
-        Output2FILE::Stream() = log_fd;
-
         dispatch(nlhs, plhs, nrhs, prhs);
-
+    } catch (boost::exception &e) {
+        FILE_LOG(logERROR) << boost::diagnostic_information(e);
         std::fclose(log_fd);
+        throw;
     } catch (std::exception &e) {
+        FILE_LOG(logERROR) << e.what();
         std::fclose(log_fd);
-        mexErrMsgTxt((boost::format("exception: %s") % e.what()).str().c_str());
+        throw;
     } catch (...) {
         std::fclose(log_fd);
-        mexErrMsgTxt("unknown error in sdm_mex");
+        throw;
     }
+    std::fclose(log_fd);
 }
