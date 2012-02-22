@@ -125,6 +125,15 @@ namespace detail {
             return true;
         }
 
+
+        // any absolutely enormous values?
+        for (size_t i = 0; i < l; i++) {
+            if (std::abs(km[i]) > 1e70) {
+                FILE_LOG(logWARNING) << "enormous kernel value: " << km[i];
+                return true;
+            }
+        }
+
         // TODO: other tests?
 
         return false;
@@ -177,7 +186,7 @@ namespace detail {
             project_to_symmetric_psd(km, num_bags);
 
             // is it a constant matrix or something else awful?
-            if (num_kernels != 1 && terrible_kernel(km, num_bags)) {
+            if (terrible_kernel(km, num_bags)) {
                 FILE_LOG(logDEBUG1) << "tuning: skipping terrible kernel "
                     << kernels[k]->name();
                 continue;
@@ -358,6 +367,11 @@ namespace detail {
         size_t best_correct = *std::max_element(
                 nums_correct.begin(), nums_correct.end());
         std::vector<config> best_configs;
+
+        if (best_correct == 0) {
+            FILE_LOG(logERROR) << "all kernels were terrible";
+            BOOST_THROW_EXCEPTION(std::domain_error("all kernels were terrible"));
+        }
 
         kern_start = 0;
         for (size_t i = 0; i < num_threads; i++) {
