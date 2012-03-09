@@ -72,6 +72,7 @@ namespace po = boost::program_options;
 struct ProgOpts : boost::noncopyable {
     string train_bags_file;
     string test_bags_file;
+    string cv_divs_file;
 
     npdivs::DivFunc * div_func;
     sdm::KernelGroup * kernel_group;
@@ -153,17 +154,44 @@ int main(int argc, char ** argv) {
             train_bags = npdivs::labeled_matrices_from_csv(
                     std::cin, num_train, train_labels);
         } else {
+            FILE_LOG(logINFO) << "Loading training bags...";
             ifstream ifs(opts.train_bags_file.c_str(), ifstream::in);
             train_bags = npdivs::labeled_matrices_from_csv(
                     ifs, num_train, train_labels);
+            FILE_LOG(logINFO) << "done.";
+        }
+
+        // load divergences, maybe
+        bool do_cv = !opts.cv_divs_file.empty() || opts.test_bags_file.empty();
+
+        double* cv_divs = NULL;
+        if (!opts.cv_divs_file.empty()) {
+            flann::Matrix<double> cv_divs_m;
+            if (opts.cv_divs_file == "-") {
+                cout << "Enter the matrix of divergences among training bags "
+                    "in CSV-like format.";
+                cv_divs_m = npdivs::matrix_from_csv(cin);
+            } else {
+                ifstream ifs(opts.cv_divs_file.c_str(), ifstream::in);
+                cv_divs_m = npdivs::matrix_from_csv(ifs);
+            }
+
+            if (cv_divs_m.rows != num_train || cv_divs_m.cols != num_train) {
+                FILE_LOG(logERROR) << boost::format(
+                        "Input divergences are %dx%d, expected %dx%d. "
+                        "Ignoring them.")
+                    % cv_divs_m.rows % cv_divs_m.cols
+                    % num_train % num_train;
+                do_cv = opts.test_bags_file.empty();
+            } else {
+                cv_divs = cv_divs_m.ptr();
+            }
         }
 
         // load test bags, maybe
         size_t num_test = 0;
         Matrix* test_bags;
         vector<string> test_labels;
-
-        bool do_cv = opts.test_bags_file.empty();
 
         if (!do_cv) {
             if (opts.test_bags_file == "-") {
@@ -175,9 +203,11 @@ int main(int argc, char ** argv) {
                 test_bags = npdivs::labeled_matrices_from_csv(
                         cin, num_test, test_labels);
             } else {
+                FILE_LOG(logINFO) << "Loading test bags...";
                 ifstream ifs(opts.test_bags_file.c_str(), ifstream::in);
                 test_bags = npdivs::labeled_matrices_from_csv(
                         ifs, num_test, test_labels);
+                FILE_LOG(logINFO) << "done.";
             }
         }
 
@@ -270,8 +300,8 @@ int main(int argc, char ** argv) {
             double acc = crossvalidate(train_bags, num_train,
                     train_labels_ints, *opts.div_func, *opts.kernel_group,
                     div_params, opts.cv_folds, opts.cv_threads,
-                    !opts.proj_indiv,
-                    sdm::default_c_vals, svm_params, opts.tuning_folds);
+                    !opts.proj_indiv, sdm::default_c_vals, svm_params,
+                    opts.tuning_folds, cv_divs);
             cout << opts.cv_folds << "-fold cross-validation accuracy on "
                 << num_train << " bags: " << 100. * acc << "%" << endl;
         }
@@ -303,6 +333,13 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             "- means stdin. "
             "\nUse a blank line or ? as the label if it's not known. If any "
             "test distributions are labeled, will report accuracy on them.")
+        ("cv-divs,D",
+            po::value<string>(&opts.cv_divs_file)->default_value(""),
+            "CSV file containing precomputed divergences among all the bags "
+            "to use for cross-validation. Still reads --train-bags for labels "
+            "only; --test-bags is ignored.")
+        // TODO: support giving labels only
+        // TODO: test divs support
         ("cv-folds,c",
             po::value<size_t>(&opts.cv_folds)->default_value(10),
             "Do c-fold cross-validation on the data passed in --train-bags. "
