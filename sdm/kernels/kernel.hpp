@@ -66,7 +66,7 @@ public:
     virtual ~KernelGroup() {}
 
     virtual const boost::ptr_vector<Kernel>* getTuningVector(
-            double* divs, size_t n) const = 0;
+            const double* divs, size_t n) const = 0;
 
     KernelGroup* clone() const;
 

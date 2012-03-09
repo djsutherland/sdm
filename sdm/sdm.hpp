@@ -242,18 +242,20 @@ double crossvalidate(
     size_t folds = 10,
     size_t num_cv_threads = 0,
     bool project_all_data = true,
+    bool shuffle_order = true,
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3,
-    double *divs = NULL);
+    const double *divs = NULL);
 
 double crossvalidate(
-    double *divs, size_t num_bags,
+    const double *divs, size_t num_bags,
     const std::vector<int> &labels,
     const KernelGroup &kernel_group,
     size_t folds = 10,
     size_t num_cv_threads = 0,
     bool project_all_data = true,
+    bool shuffle_order = true,
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3);
@@ -265,7 +267,10 @@ namespace detail {
     // copy kernel values into an svm_problem structure
     void store_kernel_matrix(svm_problem &prob, const double *divs, bool alloc);
 
-    // don't actually print the argument
+    // random index < the passed one; needed by crossvalidate
+    ptrdiff_t rand_idx(ptrdiff_t i);
+
+    // log the string argument to the appropriate log level
     template <TLogLevel tl>
     void log(const char *s) {
         FILE_LOG(tl) << boost::trim_copy(std::string(s));
@@ -300,7 +305,7 @@ namespace detail {
             return vec[0];
         } else {
             // use c++'s silly random number generator; good enough for this
-            std::srand(std::time(NULL));
+            // note that srand() should've been called before this
             return vec[std::rand() % n];
         }
     }
@@ -399,6 +404,9 @@ SDM<Scalar> * train_sdm(
     // ask the kernel group for the kernels we'll pick from for tuning
     const boost::ptr_vector<Kernel>* kernels =
         kernel_group.getTuningVector(divs, num_train);
+
+    // tune_params will need this
+    std::srand(unsigned(std::time(NULL)));
 
     // tuning: cross-validate over possible svm/kernel parameters
     FILE_LOG(logINFO) << "train: tuning parameters";
@@ -574,10 +582,11 @@ double crossvalidate(
     size_t folds,
     size_t num_cv_threads,
     bool project_all_data,
+    bool shuffle_order,
     const std::vector<double> &c_vals,
     const svm_parameter &svm_params,
     size_t tuning_folds,
-    double *divs)
+    const double *divs)
 {
     typedef flann::Matrix<Scalar> Matrix;
 
@@ -605,7 +614,8 @@ double crossvalidate(
     }
 
     double acc = crossvalidate(divs, num_bags, labels, kernel_group, folds,
-            num_cv_threads, project_all_data, c_vals, svm_params, tuning_folds);
+            num_cv_threads, project_all_data, shuffle_order,
+            c_vals, svm_params, tuning_folds);
 
     if (free_divs)
         delete[] divs;

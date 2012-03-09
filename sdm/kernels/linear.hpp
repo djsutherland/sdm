@@ -59,7 +59,7 @@ public:
     LinearKernelGroup() {}
 
     virtual const boost::ptr_vector<Kernel>* getTuningVector(
-            double* divs, size_t n) const;
+            const double* divs, size_t n) const;
 
 private:
     virtual LinearKernelGroup* do_clone() const;

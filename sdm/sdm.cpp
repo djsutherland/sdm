@@ -71,24 +71,39 @@ template double crossvalidate<float>(
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
     const npdivs::DivParams &div_params,
-    size_t folds, size_t num_cv_threads, bool project_all_data,
+    size_t folds, size_t num_cv_threads,
+    bool project_all_data, bool shuffle_order,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
     size_t tuning_folds,
-    double* divs);
+    const double* divs);
 
 template double crossvalidate<double>(
     const flann::Matrix<double> *bags, size_t num_bags,
     const std::vector<int> &labels,
     const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
     const npdivs::DivParams &div_params,
-    size_t folds, size_t num_cv_threads, bool project_all_data,
+    size_t folds, size_t num_cv_threads,
+    bool project_all_data, bool shuffle_order,
     const std::vector<double> &c_vals, const svm_parameter &svm_params,
     size_t tuning_folds,
-    double* divs);
+    const double* divs);
 
 
 // helper function implementations
 namespace detail {
+
+    // random index < the passed one; needed by crossvalidate
+    ptrdiff_t rand_idx(ptrdiff_t i) {
+        if (i < RAND_MAX) {
+            return rand() % i;
+        } else {
+            int n = i / RAND_MAX + 1;
+            size_t r = 0;
+            for (int j = 0; j < n; j++)
+                r += rand();
+            return rand() % i;
+        }
+    }
 
     // copy kernel values into an svm_problem structure
     void store_kernel_matrix(svm_problem &prob, const double *divs, bool alloc)
@@ -665,12 +680,13 @@ namespace detail {
 
 
 double crossvalidate(
-    double *divs, size_t num_bags,
+    const double *divs, size_t num_bags,
     const std::vector<int> &labels,
     const KernelGroup &kernel_group,
     size_t folds,
     size_t num_cv_threads,
     bool project_all_data,
+    bool shuffle_order,
     const std::vector<double> &c_vals,
     const svm_parameter &svm_params,
     size_t tuning_folds)
@@ -693,8 +709,6 @@ double crossvalidate(
     // make libSVM log properly
     svm_set_print_string_function(&detail::log<logDEBUG4>);
 
-    // symmetrize divergence estimates
-    symmetrize(divs, num_bags);
 
     // ask for the list of kernels to choose from
     const boost::ptr_vector<Kernel> *kernels =
@@ -710,6 +724,38 @@ double crossvalidate(
         flann::KDTreeSingleIndexParams(), flann::SearchParams(-1),
         std::max(size_t(1), size_t(double(num_cv_threads) / real_cv_threads)));
 
+    // need this for parameter tuning and shuffling
+    std::srand(unsigned(std::time(NULL)));
+
+    // reorder the divs/labels, so folds are randomized
+    double* shuff_divs = new double[num_bags*num_bags];
+    std::vector<int> shuff_labels;
+
+    if (shuffle_order) {
+        shuff_labels.resize(num_bags);
+
+        size_t* perm = new size_t[num_bags];
+        for (size_t i = 0; i < num_bags; i++)
+            perm[i] = i;
+        std::random_shuffle(perm, perm+num_bags, detail::rand_idx);
+
+        for (size_t i = 0; i < num_bags; i++) {
+            size_t p_i = perm[i];
+            shuff_labels[p_i] = labels[i];
+            for (size_t j = 0; j < num_bags; j++)
+                shuff_divs[p_i * num_bags + perm[j]] = divs[i*num_bags + j];
+        }
+
+        delete[] perm;
+
+    } else {
+        std::copy(divs, divs + num_bags*num_bags, shuff_divs);
+        shuff_labels = labels;
+    }
+
+    // symmetrize divergence estimates
+    symmetrize(shuff_divs, num_bags);
+
     // do out each fold
     size_t num_test = (size_t) std::ceil(double(num_bags) / folds);
 
@@ -721,7 +767,7 @@ double crossvalidate(
         // don't actually launch separate threads, 'tis a waste
 
         boost::exception_ptr error;
-        detail::cv_worker worker(divs, num_bags, labels,
+        detail::cv_worker worker(shuff_divs, num_bags, shuff_labels,
                 kernels, svm_p, c_vals, tuning_folds,
                 project_all_data, pred_div_params, jobs_mutex, jobs,
                 results_mutex, num_correct, error);
@@ -751,7 +797,7 @@ double crossvalidate(
 
         for (size_t i = 0; i < real_cv_threads; i++) {
             workers.push_back(new detail::cv_worker(
-                divs, num_bags, labels, kernels,
+                shuff_divs, num_bags, shuff_labels, kernels,
                 svm_p, c_vals, tuning_folds, project_all_data, pred_div_params,
                 jobs_mutex, jobs, results_mutex, num_correct, errors[i]
             ));
@@ -766,6 +812,7 @@ double crossvalidate(
 
     // clean up
     delete kernels;
+    delete[] shuff_divs;
 
     // return accuracy
     return double(num_correct) / num_bags;

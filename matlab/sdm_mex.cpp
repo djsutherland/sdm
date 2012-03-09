@@ -726,6 +726,7 @@ double crossvalidate(
                 opts.getDivParams(),
                 opts.folds,
                 opts.project_all,
+                false,
                 opts.cv_threads,
                 opts.getCvals(),
                 opts.getSVMParams(),

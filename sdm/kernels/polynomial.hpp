@@ -87,7 +87,7 @@ public:
     {} 
 
     virtual const boost::ptr_vector<Kernel>* getTuningVector(
-            double* divs, size_t n) const;
+            const double* divs, size_t n) const;
 
 private:
     virtual PolynomialKernelGroup* do_clone() const;

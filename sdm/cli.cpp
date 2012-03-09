@@ -84,6 +84,7 @@ struct ProgOpts : boost::noncopyable {
     size_t tuning_folds;
     bool prob;
     bool proj_indiv;
+    bool shuffle;
 
     flann::IndexParams index_params;
     flann::SearchParams search_params;
@@ -300,7 +301,8 @@ int main(int argc, char ** argv) {
             double acc = crossvalidate(train_bags, num_train,
                     train_labels_ints, *opts.div_func, *opts.kernel_group,
                     div_params, opts.cv_folds, opts.cv_threads,
-                    !opts.proj_indiv, sdm::default_c_vals, svm_params,
+                    !opts.proj_indiv, opts.shuffle,
+                    sdm::default_c_vals, svm_params,
                     opts.tuning_folds, cv_divs);
             cout << opts.cv_folds << "-fold cross-validation accuracy on "
                 << num_train << " bags: " << 100. * acc << "%" << endl;
@@ -381,6 +383,9 @@ bool parse_args(int argc, char ** argv, ProgOpts& opts) {
             po::value<bool>(&opts.proj_indiv)->default_value(0)->zero_tokens(),
             "When cross-validating, do the PSD projection on each fold's "
             "training data only, rather than on the entire kernel matrix.")
+        ("shuffle",
+            po::value<bool>(&opts.shuffle)->default_value(1),
+            "Whether to shuffle the order of folds in cross-validation.")
         ("num-threads,T",
             po::value<size_t>(&opts.num_threads)->default_value(0),
             "Number of threads to use for calculations. 0 means one per core "

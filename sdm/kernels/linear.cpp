@@ -47,7 +47,7 @@ LinearKernel* LinearKernel::do_clone() const { return new LinearKernel(); }
 
 
 const boost::ptr_vector<Kernel>* LinearKernelGroup::getTuningVector(
-        double* divs, size_t n)
+        const double* divs, size_t n)
 const {
     boost::ptr_vector<Kernel>* kerns = new boost::ptr_vector<Kernel>;
     kerns->push_back(new LinearKernel());

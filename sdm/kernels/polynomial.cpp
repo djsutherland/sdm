@@ -56,7 +56,7 @@ PolynomialKernel* PolynomialKernel::do_clone() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 const boost::ptr_vector<Kernel>* PolynomialKernelGroup::getTuningVector(
-        double* divs, size_t n)
+        const double* divs, size_t n)
 const {
     boost::ptr_vector<Kernel>* kerns = new boost::ptr_vector<Kernel>;
     for (size_t d = 0; d < degrees.size(); d++) {

@@ -275,10 +275,11 @@ class EasySmallSDMTest : public ::testing::Test {
             size_t cv_threads = 0,
             const vector<double> &cs = default_c_vals,
             size_t tuning_folds = 3,
-            bool project_all = true)
+            bool project_all = true,
+            bool shuffle = true)
     {
         return crossvalidate(train, num_train, labels, div_func, kernel_group,
-            div_params, folds, cv_threads, project_all, cs, svm_params,
+            div_params, folds, cv_threads, project_all, shuffle, cs, svm_params,
             tuning_folds);
     }
 
