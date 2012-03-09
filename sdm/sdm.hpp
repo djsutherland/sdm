@@ -51,7 +51,6 @@
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <boost/thread.hpp>
 #include <boost/utility.hpp>
-// TODO: copy exceptions across threads with boost::exception_ptr
 
 #include <np-divs/matrix_arrays.hpp>
 #include <np-divs/np_divs.hpp>
@@ -61,7 +60,7 @@
 
 namespace sdm {
 
-// TODO: optionally save and reuse flann indices and/or rhos, nus, esp. in CV
+// TODO: optionally save and reuse flann indices and/or rhos, nus
 //       (requires adding these options to npdivs...)
 
 // TODO: probability models seem to just suck (at least on one example)
@@ -78,18 +77,22 @@ class SDM {
 
     const flann::Matrix<Scalar> *train_bags;
     const size_t num_train;
+    const size_t dim;
 
     public:
         SDM(const svm_model &svm, const svm_problem &svm_prob,
             const npdivs::DivFunc &div_func, const Kernel &kernel,
             const npdivs::DivParams &div_params,
             size_t num_classes,
-            const flann::Matrix<Scalar> *train_bags, size_t num_train)
+            const flann::Matrix<Scalar> *train_bags, size_t num_train,
+            size_t dim=0)
         :
             svm(svm), svm_prob(svm_prob),
             div_func(new_clone(div_func)), kernel(new_clone(kernel)),
             div_params(div_params), num_classes(num_classes),
-            train_bags(train_bags), num_train(num_train)
+            train_bags(train_bags), num_train(num_train),
+            dim(dim > 0 ? dim :
+                (num_train > 0 && train_bags != NULL ? train_bags[0].cols : 0))
         { }
 
         ~SDM() {
@@ -116,16 +119,14 @@ class SDM {
         }
 
         size_t getNumTrain() const { return num_train; }
-        size_t getDim() const {
-            return num_train > 0 ? train_bags[0].cols : 0;
-        }
+        size_t getDim() const { return dim; }
         size_t getNumClasses() const { return num_classes; }
         const flann::Matrix<Scalar> * getTrainBags() { return train_bags; }
 
         std::string name() const {
             return (boost::format(
                 "SDM(%d classes, dim %d, %s, kernel %s, C %g, %d training%s)")
-                    % num_classes % getDim()
+                    % num_classes % dim
                     % div_func->name() % kernel->name()
                     % svm.param.C
                     % num_train
@@ -245,6 +246,17 @@ double crossvalidate(
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3,
     double *divs = NULL);
+
+double crossvalidate(
+    double *divs, size_t num_bags,
+    const std::vector<int> &labels,
+    const KernelGroup &kernel_group,
+    size_t folds = 10,
+    size_t num_cv_threads = 0,
+    bool project_all_data = true,
+    const std::vector<double> &c_vals = default_c_vals,
+    const svm_parameter &svm_params = default_svm_params,
+    size_t tuning_folds = 3);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
@@ -473,6 +485,12 @@ std::vector<int> SDM<Scalar>::predict(
 const {
     // TODO: np_divs option to compute things both ways and/or save trees
     // TODO: only compute divergences from support vectors
+
+    if (train_bags == NULL) {
+        BOOST_THROW_EXCEPTION(std::domain_error("this SDM doesn't have "
+                    "its training bags saved; can only predict_from_kerns"));
+    }
+
     double *div_data = new double[num_test * num_train];
     flann::Matrix<double> divs(div_data, num_test, num_train);
 
@@ -546,205 +564,6 @@ const {
 ////////////////////////////////////////////////////////////////////////////////
 // Cross-validation
 
-namespace detail {
-
-template <typename Scalar>
-struct cv_worker : boost::noncopyable {
-protected:
-    typedef std::pair<size_t, size_t> size_pair;
-    typedef flann::Matrix<Scalar> Matrix;
-
-    const Matrix *bags;
-    const size_t num_bags;
-    const std::vector<int> &labels;
-    const npdivs::DivFunc *div_func;
-    const boost::ptr_vector<Kernel> *kernels;
-    const double *divs;
-    const svm_parameter &svm_params;
-    const std::vector<double> c_vals;
-    const size_t tuning_folds;
-    const bool project_all_data;
-    const npdivs::DivParams &div_params;
-
-    boost::mutex &jobs_mutex;
-    std::queue<size_pair> &jobs;
-    boost::mutex &results_mutex;
-    size_t &total_correct;
-
-    boost::exception_ptr &error;
-
-public:
-    cv_worker(
-        const flann::Matrix<Scalar> *bags,
-        const size_t num_bags,
-        const std::vector<int> &labels,
-        const npdivs::DivFunc *div_func,
-        const boost::ptr_vector<Kernel> *kernels,
-        const double *divs,
-        const svm_parameter &svm_params,
-        const std::vector<double> c_vals,
-        const size_t tuning_folds,
-        const bool project_all_data,
-        const npdivs::DivParams &div_params,
-        boost::mutex &jobs_mutex,
-        std::queue<size_pair> &jobs,
-        boost::mutex &results_mutex,
-        size_t &total_correct,
-        boost::exception_ptr &error)
-    :
-        bags(bags), num_bags(num_bags), labels(labels), div_func(div_func),
-        kernels(kernels), divs(divs), svm_params(svm_params),
-        c_vals(c_vals), tuning_folds(tuning_folds),
-        project_all_data(project_all_data), div_params(div_params),
-        jobs_mutex(jobs_mutex), jobs(jobs),
-        results_mutex(results_mutex), total_correct(total_correct),
-        error(error)
-    {}
-
-    void operator()() {
-        size_pair job;
-        size_t num_correct = 0;
-
-        try {
-            while (true) {
-                { // get a job
-                    boost::mutex::scoped_lock the_lock(jobs_mutex);
-                    if (jobs.size() == 0)
-                        break;
-                    job = jobs.front();
-                    jobs.pop();
-                }
-
-                num_correct += do_job(job.first, job.second);
-            }
-
-            { // write the result
-                boost::mutex::scoped_lock the_lock(results_mutex);
-                total_correct += num_correct;
-            }
-        } catch (...) {
-            error = boost::current_exception();
-            return;
-        }
-    }
-
-    size_t do_job(size_t test_start, size_t test_end) const {
-        // testing is in [test_start, test_end)
-        size_t num_test = test_end - test_start;
-        size_t num_train = num_bags - num_test;
-
-        // copy into training / testing data
-        Matrix *train_bags = new Matrix[num_train];
-        Matrix *test_bags  = new Matrix[num_test];
-
-        for (size_t i = 0; i < test_start; i++)
-            train_bags[i] = bags[i];
-        for (size_t i = test_start; i < test_end; i++)
-            test_bags[i - test_start] = bags[i];
-        for (size_t i = test_end; i < num_bags; i++)
-            train_bags[i - num_test] = bags[i];
-
-        // set up training labels
-        std::vector<int> train_labels(num_train);
-        std::copy(labels.begin(), labels.begin() + test_start,
-                train_labels.begin());
-        std::copy(labels.begin() + test_end, labels.end(),
-                train_labels.begin() + test_start);
-
-        // tune the kernel parameters
-        double *train_km = new double[num_train * num_train];
-        double *test_km = new double[num_test * num_train];
-        copy_from_full_to_split(divs, train_km, test_km,
-                test_start, num_train, num_test);
-
-        svm_parameter svm_p = svm_params;
-
-        const std::pair<size_t, size_t> &best_config = tune_params(
-                train_km, num_train, train_labels, *kernels, c_vals,
-                svm_p, tuning_folds, div_params.num_threads);
-
-        const Kernel &kernel = (*kernels)[best_config.first];
-        svm_p.C = c_vals[best_config.second];
-
-        // project either the whole matrix or just the training
-
-        if (project_all_data) {
-            double *full_km = new double[num_bags * num_bags];
-            std::copy(divs, divs + num_bags * num_bags, full_km);
-
-            kernel.transformDivergences(full_km, num_bags);
-            project_to_symmetric_psd(full_km, num_bags);
-
-            copy_from_full_to_split(full_km, train_km, test_km,
-                    test_start, num_train, num_test);
-
-            delete[] full_km;
-
-        } else {
-            copy_from_full_to_split(
-                    divs, train_km, test_km, test_start, num_train, num_test);
-
-            kernel.transformDivergences(train_km, num_train);
-            project_to_symmetric_psd(train_km, num_train);
-
-            kernel.transformDivergences(test_km, num_test, num_train);
-        }
-
-        // set up svm parameters
-        svm_problem prob;
-        prob.l = num_train;
-        prob.y = new double[num_train];
-        for (size_t i = 0; i < num_train; i++)
-            prob.y[i] = double(train_labels[i]);
-        detail::store_kernel_matrix(prob, train_km, true);
-
-        // check svm params
-        const char* error = svm_check_parameter(&prob, &svm_params);
-        if (error != NULL) {
-            FILE_LOG(logERROR) << "LibSVM parameter error: " << error;
-            BOOST_THROW_EXCEPTION(std::domain_error(error));
-        }
-
-        // train!
-        svm_model *svm = svm_train(&prob, &svm_p);
-        SDM<Scalar> sdm(*svm, prob, *div_func, kernel, div_params,
-                svm_get_nr_class(svm), train_bags, num_train);
-
-        // predict!
-        std::vector<int> preds;
-        std::vector< std::vector<double> > vals;
-        sdm.predict_from_kerns(test_km, num_test, preds, vals);
-
-        // how many did we get right?
-        size_t num_correct = 0;
-        for (size_t i = 0; i < num_test; i++)
-            if (preds[i] == labels[test_start + i])
-                num_correct++;
-
-        FILE_LOG(logINFO) << "CV " << test_start << " - " << test_end
-            << ": " << num_correct << "/" << num_test << " correct by "
-            << kernel.name() << ", C=" << svm_p.C;
-
-        // clean up
-        delete[] train_km;
-        delete[] test_km;
-        delete[] train_bags;
-        delete[] test_bags;
-        for (size_t i = 0; i < num_train; i++)
-            delete[] prob.x[i];
-        delete[] prob.x;
-        delete[] prob.y;
-        svm_free_model_content(svm);
-        delete svm;
-
-        return num_correct;
-    }
-};
-
-
-} // end detail namespace
-
-
 template <typename Scalar>
 double crossvalidate(
     const flann::Matrix<Scalar> *bags, size_t num_bags,
@@ -772,14 +591,6 @@ double crossvalidate(
            "Can't use %d folds with only %d bags.") % folds % num_bags).str()));
     }
 
-    // copy the svm params so we can change them
-    svm_parameter svm_p = svm_params;
-    svm_p.svm_type = C_SVC;
-    svm_p.kernel_type = PRECOMPUTED;
-
-    // make libSVM log properly
-    svm_set_print_string_function(&detail::log<logDEBUG4>);
-
     // calculate the full matrix of divergences if necessary
     bool free_divs = false;
 
@@ -793,84 +604,13 @@ double crossvalidate(
         delete[] divs_mat; // doesn't delete content, just the Matrix array
     }
 
-    // symmetrize divergence estimates
-    symmetrize(divs, num_bags);
+    double acc = crossvalidate(divs, num_bags, labels, kernel_group, folds,
+            num_cv_threads, project_all_data, c_vals, svm_params, tuning_folds);
 
-    // ask for the list of kernels to choose from
-    const boost::ptr_vector<Kernel> *kernels =
-        kernel_group.getTuningVector(divs, num_bags);
-
-    // figure out the numbers of threads to use
-    size_t div_threads = npdivs::get_num_threads(div_params.num_threads);
-    if (num_cv_threads == 0) num_cv_threads = div_threads;
-    if (num_cv_threads > folds) num_cv_threads = folds;
-
-    // don't want to blow up total # of threads when the workers are tuning
-    npdivs::DivParams pred_div_params = div_params;
-    pred_div_params.num_threads = std::max(size_t(1),
-            size_t(double(div_threads) / num_cv_threads));
-
-    // do out each fold
-    size_t num_test = (size_t) std::ceil(double(num_bags) / folds);
-
-    std::queue< std::pair<size_t, size_t> > jobs;
-    size_t num_correct = 0;
-    boost::mutex jobs_mutex, results_mutex;
-
-    if (num_cv_threads <= 1) {
-        // don't actually launch separate threads, 'tis a waste
-
-        boost::exception_ptr error;
-        detail::cv_worker<Scalar> worker(bags, num_bags, labels, &div_func,
-                kernels, divs, svm_p, c_vals, tuning_folds,
-                project_all_data, pred_div_params, jobs_mutex, jobs,
-                results_mutex, num_correct, error);
-
-        for (size_t fold = 0; fold < folds; fold++) {
-            size_t test_start = fold * num_test;
-            size_t test_end = std::min(test_start + num_test, num_bags);
-            if (test_start < test_end)
-                num_correct += worker.do_job(test_start, test_end);
-        }
-
-    } else {
-        // queue up the jobs
-        for (size_t fold = 0; fold < folds; fold++) {
-            size_t test_start = fold * num_test;
-            size_t test_end = std::min(test_start + num_test, num_bags);
-            if (test_start < test_end)
-                jobs.push(std::make_pair(test_start, test_end));
-        }
-
-        // keep worker objects in this ptr_vector to avoid copying but also
-        // have them be destroyed when appropriate
-        boost::ptr_vector< detail::cv_worker<Scalar> > workers;
-        std::vector<boost::exception_ptr> errors(num_cv_threads);
-
-        boost::thread_group worker_threads;
-
-        for (size_t i = 0; i < num_cv_threads; i++) {
-            workers.push_back(new detail::cv_worker<Scalar>(
-                bags, num_bags, labels, &div_func, kernels, divs,
-                svm_p, c_vals, tuning_folds, project_all_data, pred_div_params,
-                jobs_mutex, jobs, results_mutex, num_correct, errors[i]
-            ));
-            worker_threads.create_thread(boost::ref(workers[i]));
-        }
-
-        worker_threads.join_all();
-        for (size_t i = 0; i < num_cv_threads; i++)
-            if (errors[i])
-                boost::rethrow_exception(errors[i]);
-    }
-
-    // clean up
-    delete kernels;
     if (free_divs)
         delete[] divs;
 
-    // return accuracy
-    return double(num_correct) / num_bags;
+    return acc;
 }
 
 } // end namespace
