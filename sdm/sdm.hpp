@@ -187,7 +187,7 @@ const svm_parameter default_svm_params = {
     0,    // degree - not used
     0,    // gamma - not used
     0,    // coef0 - not used
-    100,  // cache_size, in MB
+    1024,  // cache_size, in MB
     1e-3, // eps
     1,    // C
     0,    // nr_weight
