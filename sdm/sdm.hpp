@@ -175,8 +175,8 @@ class SDM {
 // set up default values for training
 
 namespace detail {
-    const double cvals[11] = { // 2^-9, 2^-6, ..., 2^21
-        1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18, 1<<21
+    const double cvals[10] = { // 2^-9, 2^-6, ..., 2^18
+        1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18
     };
 }
 
@@ -198,7 +198,7 @@ const svm_parameter default_svm_params = {
     1,    // shrinking
     1     // probability
 };
-const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 11);
+const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 10);
 
 // Function to train a new SDM. Note that the caller is responsible for
 // deleting the svm and svm_prob attributes, as well as train_bags.
