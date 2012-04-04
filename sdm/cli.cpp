@@ -173,8 +173,10 @@ int main(int argc, char ** argv) {
                     "in CSV-like format.";
                 cv_divs_m = npdivs::matrix_from_csv(cin);
             } else {
+                FILE_LOG(logINFO) << "Loading divergences...";
                 ifstream ifs(opts.cv_divs_file.c_str(), ifstream::in);
                 cv_divs_m = npdivs::matrix_from_csv(ifs);
+                FILE_LOG(logINFO) << "done.";
             }
 
             if (cv_divs_m.rows != num_train || cv_divs_m.cols != num_train) {
