@@ -54,6 +54,7 @@
 #include <np-divs/matrix_arrays.hpp>
 #include <np-divs/matrix_io.hpp>
 #include <np-divs/div-funcs/from_str.hpp>
+#include <np-divs/div_params.hpp>
 
 // TODO: support CV
 // TODO: warn about dumb parameter combos, like linear kernel with distance df
@@ -95,6 +96,7 @@ struct ProgOpts : boost::noncopyable {
 
     void parse_kernel(const string name) {
         // TODO: support specifying cs / sigmas / degrees / etc
+        // TODO: centralize this logic somewhere else
         if (name == "gaussian") {
             kernel_group = new sdm::GaussianKernelGroup;
         } else if (name == "linear") {
@@ -107,20 +109,8 @@ struct ProgOpts : boost::noncopyable {
         }
     }
 
-    void parse_index(const string name) {
-        // TODO: more index types, support arguments
-        if (name == "linear" || name == "brute") {
-            flann::LinearIndexParams ps;
-            index_params = ps;
-
-        } else if (name == "kdtree" || name == "kd") {
-            flann::KDTreeSingleIndexParams ps;
-            index_params = ps;
-
-        } else {
-            BOOST_THROW_EXCEPTION(std::domain_error((
-                        boost::format("unknown index type %s") % name).str()));
-        }
+    void parse_index(const string &name) {
+        index_params = npdivs::index_params_from_str(name);
     }
 };
 

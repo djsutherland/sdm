@@ -52,6 +52,7 @@
 
 #include <flann/flann.hpp>
 
+#include <np-divs/div_params.hpp>
 #include <np-divs/matrix_arrays.hpp>
 #include <np-divs/div-funcs/from_str.hpp>
 
@@ -531,19 +532,6 @@ struct TrainingOptions {
         }
     }
 
-    // even though this looks like object slicing, it's not, i promise
-    flann::IndexParams getIndexParams() const {
-        if (index_type == "linear" || index_type == "brute") {
-            flann::LinearIndexParams ps;
-            return ps;
-        } else if (index_type == "kdtree" || index_type == "kd") {
-            flann::KDTreeSingleIndexParams ps;
-            return ps;
-        } else {
-            mexErrMsgTxt(("unknown index type: " + index_type).c_str());
-        }
-    }
-
     svm_parameter getSVMParams() const {
         svm_parameter svm_params = sdm::default_svm_params;
         svm_params.probability = (int) probability;
@@ -552,7 +540,10 @@ struct TrainingOptions {
 
     DivParams getDivParams() const {
         flann::SearchParams search_params(-1);
-        return DivParams(k, getIndexParams(), search_params, num_threads);
+        return DivParams(k,
+                npdivs::index_params_from_str(index_type),
+                search_params,
+                num_threads);
     }
 
     vector<double> getCvals() const {
