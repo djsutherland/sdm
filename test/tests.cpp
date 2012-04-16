@@ -171,7 +171,8 @@ class EasySmallSDMTest : public ::testing::Test {
     EasySmallSDMTest() :
         num_train(NUM_TRAIN),
         num_test(NUM_TEST),
-        div_params(),
+        div_params(3, flann::KDTreeSingleIndexParams(), flann::SearchParams(-1),
+                0, false),
         svm_params(default_svm_params)
     {
         double train_bleh[NUM_TRAIN][TRAIN_SIZE] = {
