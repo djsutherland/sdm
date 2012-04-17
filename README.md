@@ -1,11 +1,15 @@
-This is a C++ implementation of Support Distribution Machines, as described by:
+This is a C++ implementation (with a Matlab MEX interface) of Support Distribution
+Machines, as described by:
 
-Barnabas Poczos, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider, 2012.
-_Support Distribution Machines._
-Technical report, Carnegie Mellon University.
-[arXiv:1202.0302](http://arxiv.org/abs/1202.0302).
+Barnabas Poczos, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider.
+_Nonparametric Kernel Estimators for Image Classification._
+CVPR 2012. http://autonlab.org/autonweb/20680.html
 
 The code was written by Dougal J. Sutherland.
+
+A pure-Matlab version of this code (much slower, but easier to set up if you're
+a Matlab user), written by Liang Xiong, is available at
+    http://autonlab.org/autonweb/20466.html
 
 Requirements
 ------------
