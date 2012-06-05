@@ -5,6 +5,7 @@ set(LIBRARY_SOURCES
     kernels/linear.cpp
     kernels/polynomial.cpp
     kernels/gaussian.cpp
+    kernels/from_str.cpp
 )
 
 set(LIBS

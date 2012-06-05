@@ -33,6 +33,7 @@
 #include "sdm/kernels/linear.hpp"
 #include "sdm/kernels/polynomial.hpp"
 #include "sdm/kernels/gaussian.hpp"
+#include "sdm/kernels/from_str.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -90,23 +91,12 @@ struct ProgOpts : boost::noncopyable {
     flann::IndexParams index_params;
     flann::SearchParams search_params;
 
-    void parse_div_func(const string spec) {
+    void parse_div_func(const string &spec) {
         div_func = npdivs::div_func_from_str(spec);
     }
 
-    void parse_kernel(const string name) {
-        // TODO: support specifying cs / sigmas / degrees / etc
-        // TODO: centralize this logic somewhere else
-        if (name == "gaussian") {
-            kernel_group = new sdm::GaussianKernelGroup;
-        } else if (name == "linear") {
-            kernel_group = new sdm::LinearKernelGroup;
-        } else if (name == "polynomial") {
-            kernel_group = new sdm::PolynomialKernelGroup;
-        } else {
-            BOOST_THROW_EXCEPTION(std::domain_error((
-                        boost::format("unknown kernel type %s") % name).str()));
-        }
+    void parse_kernel(const string &name) {
+        kernel_group = sdm::kernel_group_from_str(name);
     }
 
     void parse_index(const string &name) {
