@@ -42,11 +42,6 @@
 #include <string>
 #include <vector>
 
-#include <stdexcept>
-#include <iostream>
-#include <np-divs/matrix_io.hpp>
-#include <boost/exception/diagnostic_information.hpp>
-
 #include <flann/util/matrix.h>
 
 #include <np-divs/div-funcs/from_str.hpp>
@@ -393,15 +388,11 @@ double crossvalidate_bags_double(
 {
     Matrix<double> *bags_m = make_matrices(
             const_cast<double **>(bags), num_bags, rows, dim);
-    npdivs::matrix_array_to_csv(std::cout, bags_m, num_bags);
     
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    FILELog::ReportingLevel() = logDEBUG2;
-    double acc = -1;
-    try {
-    acc = crossvalidate(
+    double acc = crossvalidate(
             bags_m, num_bags,
             vector<int>(labels, labels + num_bags),
             *df, *kernel,
@@ -411,10 +402,6 @@ double crossvalidate_bags_double(
             vector<double>(c_vals, c_vals + num_c_vals),
             *svm_params,
             tuning_folds);
-    } catch (std::exception &e) {
-        printf("%s\n", boost::current_exception_diagnostic_information().c_str());
-        printf("%s\n", e.what());
-    }
 
     delete kernel;
     delete df;
