@@ -45,11 +45,12 @@ using namespace sdm;
 using namespace npdivs;
 using std::string;
 using std::vector;
+using flann::Matrix;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct SDMObjDouble { SDM<double> *sdm; };
-struct SDMObjFloat  { SDM<float>  *sdm; };
+struct SDMObjDouble_s { SDM<double> *sdm; };
+struct SDMObjFloat_s  { SDM<float>  *sdm; };
 
 const char *getName(SDMObjDouble sdm) { return sdm.sdm->name().c_str(); }
 const char *getName(SDMObjFloat  sdm) { return sdm.sdm->name().c_str(); }
@@ -345,14 +346,14 @@ void sdm_predict_many_vals_float(
 // cross-validation
 
 double crossvalidate_bags_double(
-        const double **bags,
+        const double ** bags,
         size_t num_bags,
         const size_t *rows,
         size_t dim,
         const int *labels,
         const char *div_func_spec,
         const char *kernel_spec,
-        const struct DivParamsC *div_params,
+        const DivParamsC *div_params,
         size_t folds,
         size_t num_cv_threads,
         short project_all_data,
@@ -393,7 +394,7 @@ double crossvalidate_bags_float(
         const int *labels,
         const char *div_func_spec,
         const char *kernel_spec,
-        const struct DivParamsC *div_params,
+        const DivParamsC *div_params,
         size_t folds,
         size_t num_cv_threads,
         short project_all_data,
