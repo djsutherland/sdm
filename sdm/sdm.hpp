@@ -102,6 +102,7 @@ class SDM {
 
         void destroyModelAndProb();
         void destroyTrainBags();
+        void destroyTrainBagMatrices();
 
         // getters and so on
         const Kernel *getKernel() const { return kernel; }
@@ -352,6 +353,11 @@ void SDM<Scalar>::destroyTrainBags() {
     npdivs::free_matrix_array(
             const_cast<flann::Matrix<Scalar> *>(train_bags),
             num_train);
+}
+
+template <typename Scalar>
+void SDM<Scalar>::destroyTrainBagMatrices() {
+    delete[] train_bags;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

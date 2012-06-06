@@ -94,20 +94,24 @@ typedef struct DivParamsC_s {
 
 // C structs so we can return an SDM object from these methods
 // declared to have a single SDM<double> or SDM<float> member
-//struct SDMObjDouble_s;
-//struct SDMObjFloat_s;
+struct SDMObjDouble_s;
+struct SDMObjFloat_s;
 typedef struct SDMObjDouble_s SDMObjDouble;
-typedef struct SDMObjFloat_s SDMObjFloat;
+typedef struct SDMObjFloat_s  SDMObjFloat;
 
-char *SDMObjDouble_getName(SDMObjDouble sdm);
-char *SDMObjFloat_getName(SDMObjFloat sdm);
+const char *SDMObjDouble_getName(SDMObjDouble *sdm);
+const char *SDMObjFloat_getName (SDMObjFloat  *sdm);
+
+// free SDM memory; doesn't free the data itself, though
+void SDMObjDouble_freeModel(SDMObjDouble *sdm);
+void SDMObjFloat_freeModel(SDMObjDouble *sdm);
 
 // functions to train SDMs with
-SDMObjDouble train_sdm_double(
+SDMObjDouble *train_sdm_double(
         const double **train_bags,
         size_t num_train,
         size_t dim,
-        size_t * rows,
+        const size_t * rows,
         const int *labels,
         const char *div_func_spec,
         const char *kernel_spec,
@@ -116,11 +120,11 @@ SDMObjDouble train_sdm_double(
         const struct svm_parameter *svm_params,
         size_t tuning_folds,
         double *divs);
-SDMObjFloat train_sdm_float(
+SDMObjFloat *train_sdm_float(
         const float **train_bags,
         size_t num_train,
         size_t dim,
-        size_t * rows,
+        const size_t * rows,
         const int *labels,
         const char *div_func_spec,
         const char *kernel_spec,

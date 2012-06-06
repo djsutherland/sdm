@@ -57,8 +57,25 @@ using flann::Matrix;
 struct SDMObjDouble_s { SDM<double> *sdm; };
 struct SDMObjFloat_s  { SDM<float>  *sdm; };
 
-const char *getName(SDMObjDouble sdm) { return sdm.sdm->name().c_str(); }
-const char *getName(SDMObjFloat  sdm) { return sdm.sdm->name().c_str(); }
+const char *SDMObjDouble_getName(SDMObjDouble *sdm) {
+    return sdm->sdm->name().c_str();
+}
+const char *SDMObjFloat_getName(SDMObjFloat *sdm) {
+    return sdm->sdm->name().c_str();
+}
+
+void SDMObjDouble_freeModel(SDMObjDouble *sdm) {
+    SDM<double> *m = sdm->sdm;
+    m->destroyModelAndProb();
+    m->destroyTrainBagMatrices();
+    delete m;
+}
+void SDMObjFloat_freeModel(SDMObjFloat *sdm) {
+    SDM<float> *m = sdm->sdm;
+    m->destroyModelAndProb();
+    m->destroyTrainBagMatrices();
+    delete m;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -77,7 +94,7 @@ const struct svm_parameter default_svm_params = {
     0,    // nu - not used
     0,    // p - not used
     1,    // shrinking
-    1     // probability
+    0     // probability
 };
 
 
@@ -175,6 +192,8 @@ SDM<T> *train_sdm_(
         size_t tuning_folds,
         double *divs)
 {
+    // NOTE: allocates Matrix objects for your data
+    // caller needs to free them
     Matrix<T> *train_bags_m = make_matrices(const_cast<T **>(train_bags),
             num_train, rows, dim);
 
@@ -194,12 +213,11 @@ SDM<T> *train_sdm_(
 
     delete kernel;
     delete df;
-    delete[] train_bags_m;
 
     return sdm;
 }
 
-SDMObjDouble train_sdm_double(
+SDMObjDouble *train_sdm_double(
         const double **train_bags, size_t num_train,
         size_t dim, const size_t * rows,
         const int *labels, const char *div_func_spec, const char *kernel_spec,
@@ -210,12 +228,12 @@ SDMObjDouble train_sdm_double(
     SDM<double> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
             div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
             svm_params, tuning_folds, divs);
-    SDMObjDouble ret;
-    ret.sdm = sdm;
+    SDMObjDouble *ret = (SDMObjDouble *) malloc(sizeof(SDMObjDouble *));
+    ret->sdm = sdm;
     return ret;
 }
 
-SDMObjFloat train_sdm_float(
+SDMObjFloat *train_sdm_float(
         const float **train_bags, size_t num_train,
         size_t dim, const size_t * rows,
         const int *labels, const char *div_func_spec, const char *kernel_spec,
@@ -226,8 +244,8 @@ SDMObjFloat train_sdm_float(
     SDM<float> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
             div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
             svm_params, tuning_folds, divs);
-    SDMObjFloat ret;
-    ret.sdm = sdm;
+    SDMObjFloat *ret = (SDMObjFloat *) malloc(sizeof(SDMObjFloat *));
+    ret->sdm = sdm;
     return ret;
 }
 
