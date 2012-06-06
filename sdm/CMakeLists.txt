@@ -1,5 +1,6 @@
 set(LIBRARY_SOURCES
     sdm.cpp
+    sdm_c.cpp
     kernel_projection.cpp
     kernels/kernel.cpp
     kernels/linear.cpp
@@ -47,5 +48,5 @@ install(
     DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     DESTINATION "${INSTALL_INCLUDE_DIR}"
     COMPONENT dev
-    FILES_MATCHING PATTERN "*.hpp"
+    FILES_MATCHING REGEX "/.*\\.h(pp)?$"
 )
