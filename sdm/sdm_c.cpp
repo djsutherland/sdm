@@ -2,6 +2,10 @@
  * Copyright (c) 2012, Dougal J. Sutherland (dsutherl@cs.cmu.edu).             *
  * All rights reserved.                                                        *
  *                                                                             *
+ * Portions included from the FLANN library:                                   *
+ * Copyright 2008-2009  Marius Muja (mariusm@cs.ubc.ca). All rights reserved.  *
+ * Copyright 2008-2009  David G. Lowe (lowe@cs.ubc.ca). All rights reserved.   *
+ *
  * Redistribution and use in source and binary forms, with or without          *
  * modification, are permitted provided that the following conditions are met: *
  *                                                                             *
@@ -12,9 +16,10 @@
  *       notice, this list of conditions and the following disclaimer in the   *
  *       documentation and/or other materials provided with the distribution.  *
  *                                                                             *
- *     * Neither the name of Carnegie Mellon University nor the                *
- *       names of the contributors may be used to endorse or promote products  *
- *       derived from this software without specific prior written permission. *
+ *     * Neither the name of Carnegie Mellon University, the University of     *
+ *       British Columbia, nor the names of the contributors may be used to    *
+ *       endorse or promote products derived from this software without        *
+ *       specific prior written permission.                                    *
  *                                                                             *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" *
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE   *
@@ -28,14 +33,19 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#include "sdm/sdm_c.h"
 #include "sdm/sdm.hpp"
+#include "sdm/sdm_c.h"
 #include "sdm/kernels/from_str.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 #include <string>
 #include <vector>
+
+#include <stdexcept>
+#include <iostream>
+#include <np-divs/matrix_io.hpp>
+#include <boost/exception/diagnostic_information.hpp>
 
 #include <flann/util/matrix.h>
 
@@ -56,6 +66,25 @@ const char *getName(SDMObjDouble sdm) { return sdm.sdm->name().c_str(); }
 const char *getName(SDMObjFloat  sdm) { return sdm.sdm->name().c_str(); }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+const struct svm_parameter default_svm_params = {
+    C_SVC, // svm_type
+    PRECOMPUTED, // kernel_type
+    0,    // degree - not used
+    0,    // gamma - not used
+    0,    // coef0 - not used
+    1024, // cache_size, in MB
+    1e-3, // eps
+    1,    // C
+    0,    // nr_weight
+    NULL, // weight_label
+    NULL, // weight
+    0,    // nu - not used
+    0,    // p - not used
+    1,    // shrinking
+    1     // probability
+};
+
 
 // copied from flann/flann.cpp
 flann::IndexParams create_parameters(const FLANNParameters* p)
@@ -364,11 +393,15 @@ double crossvalidate_bags_double(
 {
     Matrix<double> *bags_m = make_matrices(
             const_cast<double **>(bags), num_bags, rows, dim);
+    npdivs::matrix_array_to_csv(std::cout, bags_m, num_bags);
     
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    double acc = crossvalidate(
+    FILELog::ReportingLevel() = logDEBUG2;
+    double acc = -1;
+    try {
+    acc = crossvalidate(
             bags_m, num_bags,
             vector<int>(labels, labels + num_bags),
             *df, *kernel,
@@ -378,6 +411,10 @@ double crossvalidate_bags_double(
             vector<double>(c_vals, c_vals + num_c_vals),
             *svm_params,
             tuning_folds);
+    } catch (std::exception &e) {
+        printf("%s\n", boost::current_exception_diagnostic_information().c_str());
+        printf("%s\n", e.what());
+    }
 
     delete kernel;
     delete df;

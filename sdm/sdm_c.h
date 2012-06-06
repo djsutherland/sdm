@@ -2,9 +2,9 @@
  * Copyright (c) 2012, Dougal J. Sutherland (dsutherl@cs.cmu.edu).             *
  * All rights reserved.                                                        *
  *                                                                             *
- * Portions included from the FLANN library:                                   *
- * Copyright 2008-2009  Marius Muja (mariusm@cs.ubc.ca). All rights reserved.  *
- * Copyright 2008-2009  David G. Lowe (lowe@cs.ubc.ca). All rights reserved.   *
+ * Portions included from libsvm:                                              *
+ * Copyright (c) 2000-2012 Chih-Chung Chang and Chih-Jen Lin.                  *
+ * All rights reserved.                                                        *
  *                                                                             *
  * Redistribution and use in source and binary forms, with or without          *
  * modification, are permitted provided that the following conditions are met: *
@@ -16,10 +16,9 @@
  *       notice, this list of conditions and the following disclaimer in the   *
  *       documentation and/or other materials provided with the distribution.  *
  *                                                                             *
- *     * Neither the name of Carnegie Mellon University, the University of     *
- *       British Columbia, nor the names of the contributors may be used to    &
- *       endorse or promote products derived from this software without        *
- *       specific prior written permission.                                    *
+ *     * Neither the name of Carnegie Mellon University nor the names of the   *
+ *       contributors may be used to endorse or promote products derived from  *
+ *       this software without specific prior written permission.              *
  *                                                                             *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" *
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE   *
@@ -37,90 +36,49 @@
 #define SDM_C_H_
 
 #include <stddef.h>
-#include <svm.h>
 
-// can't #include flann.h, because of LINEAR constant clash with svm.h
-// #include <flann/flann.h>
+#include <flann/flann.h>
+
+// not #include-ing svm.h, because of LINEAR constant clash with flann.h
+// #include <svm.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// necessary inclusions from flann/flann.h and flann/defines.h
+#ifndef _LIBSVM_H
+// Don't want to redefine svm_parameter if we already know about it. This
+// means if including both this header and svm.h, this one MUST come second.
+// (This should only be possible in C++ code, because of the namespash clash.)
 
-enum flann_algorithm_t
+
+struct svm_parameter
 {
-    FLANN_INDEX_LINEAR = 0,
-    FLANN_INDEX_KDTREE = 1,
-    FLANN_INDEX_KMEANS = 2,
-    FLANN_INDEX_COMPOSITE = 3,
-    FLANN_INDEX_KDTREE_SINGLE = 4,
-    FLANN_INDEX_HIERARCHICAL = 5,
-    FLANN_INDEX_LSH = 6,
-    FLANN_INDEX_KDTREE_CUDA = 7,
-    FLANN_INDEX_SAVED = 254,
-    FLANN_INDEX_AUTOTUNED = 255
+	int svm_type;
+	int kernel_type;
+	int degree;	/* for poly */
+	double gamma;	/* for poly/rbf/sigmoid */
+	double coef0;	/* for poly/sigmoid */
+
+	/* these are for training only */
+	double cache_size; /* in MB */
+	double eps;	/* stopping criteria */
+	double C;	/* for C_SVC, EPSILON_SVR and NU_SVR */
+	int nr_weight;		/* for C_SVC */
+	int *weight_label;	/* for C_SVC */
+	double* weight;		/* for C_SVC */
+	double nu;	/* for NU_SVC, ONE_CLASS, and NU_SVR */
+	double p;	/* for EPSILON_SVR */
+	int shrinking;	/* use the shrinking heuristics */
+	int probability; /* do probability estimates */
 };
 
-enum flann_centers_init_t
-{
-    FLANN_CENTERS_RANDOM = 0,
-    FLANN_CENTERS_GONZALES = 1,
-    FLANN_CENTERS_KMEANSPP = 2
-};
+enum { C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR };
+const int PRECOMPUTED = 4; // only kernel type we use
+#endif
 
-enum flann_log_level_t
-{
-    FLANN_LOG_NONE = 0,
-    FLANN_LOG_FATAL = 1,
-    FLANN_LOG_ERROR = 2,
-    FLANN_LOG_WARN = 3,
-    FLANN_LOG_INFO = 4,
-    FLANN_LOG_DEBUG = 5
-};
+const extern struct svm_parameter default_svm_params;
 
-struct FLANNParameters
-{
-    enum flann_algorithm_t algorithm; /* the algorithm to use */
-
-    /* search time parameters */
-    int checks;                /* how many leafs (features) to check in one search */
-    float cb_index;            /* cluster boundary index. Used when searching the kmeans tree */
-    float eps;     /* eps parameter for eps-knn search */
-
-    /*  kdtree index parameters */
-    int trees;                 /* number of randomized trees to use (for kdtree) */
-    int leaf_max_size;
-
-    /* kmeans index parameters */
-    int branching;             /* branching factor (for kmeans tree) */
-    int iterations;            /* max iterations to perform in one kmeans cluetering (kmeans tree) */
-    enum flann_centers_init_t centers_init;  /* algorithm used for picking the initial cluster centers for kmeans tree */
-
-    /* autotuned index parameters */
-    float target_precision;    /* precision desired (used for autotuning, -1 otherwise) */
-    float build_weight;        /* build tree time weighting factor */
-    float memory_weight;       /* index memory weigthing factor */
-    float sample_fraction;     /* what fraction of the dataset to use for autotuning */
-
-    /* LSH parameters */
-    unsigned int table_number_; /** The number of hash tables to use */
-    unsigned int key_size_;     /** The length of the key in the hash tables */
-    unsigned int multi_probe_level_; /** Number of levels to use in multi-probe LSH, 0 for standard LSH */
-
-    /* other parameters */
-    enum flann_log_level_t log_level;    /* determines the verbosity of each flann function */
-    long random_seed;            /* random seed to use */
-};
-
-struct FLANNParameters DEFAULT_FLANN_PARAMETERS = {
-    FLANN_INDEX_KDTREE,
-    32, 0.2f, 0.0f,
-    4, 4,
-    32, 11, FLANN_CENTERS_RANDOM,
-    0.9f, 0.01f, 0, 0.1f,
-    FLANN_LOG_NONE, 0
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
