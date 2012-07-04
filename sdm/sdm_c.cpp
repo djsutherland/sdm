@@ -411,7 +411,7 @@ double crossvalidate_bags_double(
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    double acc = sdm::crossvalidate(
+    double acc = crossvalidate(
             bags_m, num_bags,
             vector<int>(labels, labels + num_bags),
             *df, *kernel,
