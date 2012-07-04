@@ -296,8 +296,8 @@ int main(int argc, char ** argv) {
             npdivs::free_matrix_array(test_bags, num_test);
 
     } catch (std::exception &e) {
-         cerr << "Error: " << e.what() << endl;
-         return 1;
+        cerr << "Error: " << e.what() << endl;
+        return 1;
     }
 }
 
