@@ -288,7 +288,7 @@ SDM<Scalar, label_type> * train_sdm(
     // first compute divergences, if necessary
     bool free_divs = false;
     if (divs == NULL) {
-        FILE_LOG(logINFO) << "train: computing divergences";
+        FILE_LOG(logDEBUG) << "train: computing divergences";
 
         flann::Matrix<double>* divs_f =
             npdivs::alloc_matrix_array<double>(1, num_train, num_train);
@@ -310,7 +310,7 @@ SDM<Scalar, label_type> * train_sdm(
     std::srand(unsigned(std::time(NULL)));
 
     // tuning: cross-validate over possible svm/kernel parameters
-    FILE_LOG(logINFO) << "train: tuning parameters";
+    FILE_LOG(logDEBUG) << "train: tuning parameters";
     const std::pair<size_t, size_t> &best_config =
         detail::tune_params<label_type>(divs, num_train, labels, *kernels,
                 c_vals, svm_p, tuning_folds, div_params.num_threads);
@@ -350,7 +350,7 @@ SDM<Scalar, label_type> * train_sdm(
     }
 
     // train away!
-    FILE_LOG(logINFO) << "train: training SVM";
+    FILE_LOG(logDEBUG) << "train: training SVM";
     svm_model *svm = svm_train(prob, &svm_p);
     FILE_LOG(logDEBUG3) << "train: final SVM:\n" << detail::SVMtoString(*svm);
 
