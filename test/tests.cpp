@@ -250,7 +250,7 @@ class EasySmallSDMTest : public ::testing::Test {
             size_t tuning_folds = NUM_TRAIN)
     {
         // train up the model
-        SDM<double> *model = train_sdm(train, num_train, labels, div_func,
+        SDM<double, int> *model = train_sdm(train, num_train, labels, div_func,
                 kernel_group, div_params, cs, svm_params, tuning_folds);
 
         // predict on test data

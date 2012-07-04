@@ -54,8 +54,8 @@ using flann::Matrix;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct SDMObjDouble_s { SDM<double> *sdm; };
-struct SDMObjFloat_s  { SDM<float>  *sdm; };
+struct SDMObjDouble_s { SDM<double, int> *sdm; };
+struct SDMObjFloat_s  { SDM<float,  int> *sdm; };
 
 const char *SDMObjDouble_getName(SDMObjDouble *sdm) {
     return sdm->sdm->name().c_str();
@@ -65,13 +65,13 @@ const char *SDMObjFloat_getName(SDMObjFloat *sdm) {
 }
 
 void SDMObjDouble_freeModel(SDMObjDouble *sdm) {
-    SDM<double> *m = sdm->sdm;
+    SDM<double, int> *m = sdm->sdm;
     m->destroyModelAndProb();
     m->destroyTrainBagMatrices();
     delete m;
 }
 void SDMObjFloat_freeModel(SDMObjFloat *sdm) {
-    SDM<float> *m = sdm->sdm;
+    SDM<float, int> *m = sdm->sdm;
     m->destroyModelAndProb();
     m->destroyTrainBagMatrices();
     delete m;
@@ -79,23 +79,24 @@ void SDMObjFloat_freeModel(SDMObjFloat *sdm) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const struct svm_parameter default_svm_params = {
-    C_SVC, // svm_type
-    PRECOMPUTED, // kernel_type
-    0,    // degree - not used
-    0,    // gamma - not used
-    0,    // coef0 - not used
-    1024, // cache_size, in MB
-    1e-3, // eps
-    1,    // C
-    0,    // nr_weight
-    NULL, // weight_label
-    NULL, // weight
-    0,    // nu - not used
-    0,    // p - not used
-    1,    // shrinking
-    0     // probability
-};
+const struct svm_parameter default_svm_params = sdm::default_svm_params;
+// XXX XXX XXX
+//    C_SVC, // svm_type
+//    PRECOMPUTED, // kernel_type
+//    0,    // degree - not used
+//    0,    // gamma - not used
+//    0,    // coef0 - not used
+//    1024, // cache_size, in MB
+//    1e-3, // eps
+//    1,    // C
+//    0,    // nr_weight
+//    NULL, // weight_label
+//    NULL, // weight
+//    0,    // nu - not used
+//    0,    // p - not used
+//    1,    // shrinking
+//    0     // probability
+//};
 
 
 // copied from flann/flann.cpp
@@ -178,7 +179,7 @@ Matrix<T> *make_matrices(T ** data,
 // training functions
 
 template<typename T>
-SDM<T> *train_sdm_(
+SDM<T, int> *train_sdm_(
         const T **train_bags,
         size_t num_train,
         size_t dim,
@@ -200,7 +201,7 @@ SDM<T> *train_sdm_(
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    SDM<T> *sdm = train_sdm(
+    SDM<T, int> *sdm = train_sdm(
             train_bags_m, num_train,
             std::vector<int>(labels, labels + num_train),
             *df,
@@ -225,7 +226,7 @@ SDMObjDouble *train_sdm_double(
         const struct svm_parameter *svm_params, size_t tuning_folds,
         double *divs)
 {
-    SDM<double> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
+    SDM<double, int> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
             div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
             svm_params, tuning_folds, divs);
     SDMObjDouble *ret = (SDMObjDouble *) malloc(sizeof(SDMObjDouble *));
@@ -241,7 +242,7 @@ SDMObjFloat *train_sdm_float(
         const struct svm_parameter *svm_params, size_t tuning_folds,
         double *divs)
 {
-    SDM<float> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
+    SDM<float, int> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
             div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
             svm_params, tuning_folds, divs);
     SDMObjFloat *ret = (SDMObjFloat *) malloc(sizeof(SDMObjFloat *));
@@ -410,7 +411,7 @@ double crossvalidate_bags_double(
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    double acc = crossvalidate(
+    double acc = sdm::crossvalidate(
             bags_m, num_bags,
             vector<int>(labels, labels + num_bags),
             *df, *kernel,
@@ -484,7 +485,7 @@ double crossvalidate_divs(
 {
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    double acc = crossvalidate(
+    double acc = crossvalidate<int>(
             divs, num_bags,
             vector<int>(labels, labels + num_bags),
             *kernel,

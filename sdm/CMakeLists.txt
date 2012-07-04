@@ -1,6 +1,8 @@
 set(LIBRARY_SOURCES
-    sdm.cpp
+    sdm_model.cpp
     sdm_c.cpp
+    crossvalidate.cpp
+    tune_params.cpp
     kernel_projection.cpp
     kernels/kernel.cpp
     kernels/linear.cpp

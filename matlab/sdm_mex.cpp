@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
 
+// TODO: support regression
 
 /* A MATLAB interface to the C++ SDM class.
  *
@@ -70,7 +71,7 @@ using std::vector;
 using npdivs::DivParams;
 
 using sdm::SDM;
-typedef SDM<float> SDMF;
+typedef SDM<float, int> SDMF;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions for passing class pointers between MATLAB/MEX
@@ -459,8 +460,8 @@ mxArray *make_matrix_cells(const flann::Matrix<T> *bags, size_t n) {
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor / destructor
 
-template <typename Scalar>
-void destroy(SDM<Scalar> *model) {
+template <typename Scalar, typename label_type>
+void destroy(SDM<Scalar, label_type> *model) {
     model->destroyModelAndProb();
     model->destroyTrainBags();
     delete model;
@@ -551,8 +552,9 @@ struct TrainingOptions {
     }
 };
 
-template <typename Scalar>
-SDM<Scalar> * train(const mxArray* bags_m, const mxArray* labels_m,
+template <typename Scalar, typename label_type>
+SDM<Scalar, label_type> * train(
+        const mxArray* bags_m, const mxArray* labels_m,
         const mxArray* opts_m, const mxArray* divs_m)
 {
     // first argument: training bags
@@ -561,8 +563,8 @@ SDM<Scalar> * train(const mxArray* bags_m, const mxArray* labels_m,
     // XXX these bags need to live as long as the SDM does, so alloc w/ new
 
     // second argument: labels
-    const vector<int> labels = get_vector<int>(labels_m,
-            "second argument must be an array of integers");
+    const vector<label_type> labels = get_vector<label_type>(labels_m,
+            "second argument must be an array of integers"); // XXX error string
     if (labels.size() > num_train)
         mexErrMsgTxt("got more labels than bags");
     else if (labels.size() < num_train)
@@ -602,7 +604,7 @@ SDM<Scalar> * train(const mxArray* bags_m, const mxArray* labels_m,
 
     try {
         // train away!
-        model = sdm::train_sdm<Scalar>(
+        model = sdm::train_sdm<Scalar, label_type>(
                 bags, num_train, labels,
                 *div_func, *kernel_group,
                 opts.getDivParams(),
@@ -916,7 +918,7 @@ void dispatch(int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
         const mxArray* divs = (nrhs >= 5 && !mxIsEmpty(prhs[4])) ?
                               prhs[4] : NULL;
-        SDMF *model = train<float>(prhs[1], prhs[2], prhs[3], divs);
+        SDMF *model = train<float, int>(prhs[1], prhs[2], prhs[3], divs);
 
         class_handle<SDMF> * ptr = new class_handle<SDMF>(model);
         plhs[0] = convertPtr2Mat<SDMF>(ptr);

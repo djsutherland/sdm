@@ -28,15 +28,39 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE  *
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
-#ifndef SDM_HPP_
-#define SDM_HPP_
+#ifndef SDM_DEFAULTS_HPP_
+#define SDM_DEFAULTS_HPP_
 #include "sdm/basics.hpp"
-#include "sdm/kernels/kernel.hpp"
-#include "sdm/kernel_projection.hpp"
-#include "sdm/log.hpp"
-#include "sdm/defaults.hpp"
-#include "sdm/sdm_model.hpp"
-#include "sdm/tune_params.hpp"
-#include "sdm/crossvalidate.hpp"
 
+#include <svm.h>
+
+namespace sdm {
+
+namespace detail {
+    const double cvals[10] = { // 2^-9, 2^-6, ..., 2^18
+        1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18
+    };
+}
+
+const std::vector<double> default_c_vals(detail::cvals, detail::cvals + 10);
+
+const svm_parameter default_svm_params = {
+    C_SVC, // svm_type
+    PRECOMPUTED, // kernel_type
+    0,    // degree - not used
+    0,    // gamma - not used
+    0,    // coef0 - not used
+    1024, // cache_size, in MB
+    1e-3, // eps - stopping condition tolerance
+    1,    // C - tuned in CV for both classification and regression
+    0,    // nr_weight
+    NULL, // weight_label
+    NULL, // weight
+    0,    // nu - not used
+    0.1,  // p - epsilon for regression, not currently tuned
+    1,    // use shrinking heuristics
+    0     // do probability estimates
+};
+
+}
 #endif

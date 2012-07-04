@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project (SDM)
 
+# TODO: automated tests for C interface, CLI, mex interface
+
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()

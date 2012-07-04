@@ -57,6 +57,7 @@
 #include <np-divs/div-funcs/from_str.hpp>
 #include <np-divs/div_params.hpp>
 
+// TODO: support regression
 // TODO: support CV
 // TODO: warn about dumb parameter combos, like linear kernel with distance df
 
@@ -239,7 +240,7 @@ int main(int argc, char ** argv) {
 
         if (!do_cv) {
             // train the model
-            sdm::SDM<double>* model = train_sdm(
+            sdm::SDM<double, int>* model = train_sdm(
                     train_bags, num_train, train_labels_ints,
                     *opts.div_func, *opts.kernel_group, div_params,
                     sdm::default_c_vals, svm_params, opts.tuning_folds);
