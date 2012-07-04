@@ -170,7 +170,7 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
 
 
             } else {
-                // double type; get *negative* MSE (so max is still best)
+                // double type; get *negative* squared err (so max is best)
                 for (size_t i = 0; i < num_bags; i++) {
                     double diff = cv_labels[i] - labels[i];
                     score -= diff * diff;

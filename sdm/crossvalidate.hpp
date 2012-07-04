@@ -37,6 +37,8 @@
 #include "sdm/defaults.hpp"
 #include "sdm/sdm_model.hpp"
 
+#include <cmath>
+
 #include <boost/type_traits/is_same.hpp>
 #include <boost/static_assert.hpp>
 
@@ -120,7 +122,7 @@ namespace detail {
             boost::mutex &jobs_mutex;
             std::queue<size_pair> &jobs;
             boost::mutex &results_mutex;
-            size_t &total_correct;
+            double &score;
 
             boost::exception_ptr &error;
 
@@ -138,7 +140,7 @@ namespace detail {
                     boost::mutex &jobs_mutex,
                     std::queue<size_pair> &jobs,
                     boost::mutex &results_mutex,
-                    size_t &total_correct,
+                    double &score,
                     boost::exception_ptr &error)
                 :
                     divs(divs), num_bags(num_bags), labels(labels),
@@ -146,13 +148,13 @@ namespace detail {
                     c_vals(c_vals), tuning_folds(tuning_folds),
                     project_all_data(project_all_data), div_params(div_params),
                     jobs_mutex(jobs_mutex), jobs(jobs),
-                    results_mutex(results_mutex), total_correct(total_correct),
+                    results_mutex(results_mutex), score(score),
                     error(error)
         {}
 
             void operator()() {
                 size_pair job;
-                size_t num_correct = 0;
+                double this_score = 0;
 
                 try {
                     while (true) {
@@ -164,12 +166,12 @@ namespace detail {
                             jobs.pop();
                         }
 
-                        num_correct += do_job(job.first, job.second);
+                        this_score += do_job(job.first, job.second);
                     }
 
                     { // write the result
                         boost::mutex::scoped_lock the_lock(results_mutex);
-                        total_correct += num_correct;
+                        score += this_score;
                     }
                 } catch (...) {
                     error = boost::current_exception();
@@ -255,15 +257,31 @@ namespace detail {
                 std::vector< std::vector<double> > vals;
                 sdm.predict_from_kerns(test_km, num_test, preds, vals);
 
-                // how many did we get right?
-                size_t num_correct = 0;
-                for (size_t i = 0; i < num_test; i++)
-                    if (preds[i] == labels[test_start + i])
-                        num_correct++;
+                double score = 0;
+                if (boost::is_same<label_type, int>::value) {
+                    // how many did we get right?
+                    for (size_t i = 0; i < num_test; i++)
+                        if (preds[i] == labels[test_start + i])
+                            score++;
 
-                FILE_LOG(logINFO) << "CV " << test_start << " - " << test_end
-                    << ": " << num_correct << "/" << num_test << " correct by "
-                    << kernel.name() << ", C=" << svm_p.C;
+                    FILE_LOG(logINFO) << "CV " <<
+                        test_start << " - " << test_end << ": "
+                        << score << "/" << num_test
+                        << " correct by " << kernel.name() << ", C=" << svm_p.C;
+
+                } else {
+                    // get sum squared error
+                    for (size_t i = 0; i < num_test; i++) {
+                        double diff = preds[i] - labels[test_start + i];
+                        score += diff * diff;
+                    }
+
+                    FILE_LOG(logINFO) << "CV " <<
+                        test_start << " - " << test_end << ": "
+                        << std::sqrt(score / num_test)
+                        << " RMSE by " << kernel.name() << ", C=" << svm_p.C;
+                }
+
 
                 // clean up
                 delete[] train_km;
@@ -275,7 +293,7 @@ namespace detail {
                 svm_free_model_content(svm);
                 delete svm;
 
-                return num_correct;
+                return score;
             }
     };
 
@@ -431,7 +449,7 @@ double crossvalidate(
     size_t num_test = (size_t) std::ceil(double(num_bags) / folds);
 
     std::queue< std::pair<size_t, size_t> > jobs;
-    size_t num_correct = 0;
+    double score = 0;
     boost::mutex jobs_mutex, results_mutex;
 
     if (real_cv_threads <= 1) {
@@ -441,13 +459,13 @@ double crossvalidate(
         detail::cv_worker<label_type> worker(shuff_divs, num_bags, shuff_labels,
                 kernels, svm_p, c_vals, tuning_folds,
                 project_all_data, pred_div_params, jobs_mutex, jobs,
-                results_mutex, num_correct, error);
+                results_mutex, score, error);
 
         for (size_t fold = 0; fold < folds; fold++) {
             size_t test_start = fold * num_test;
             size_t test_end = std::min(test_start + num_test, num_bags);
             if (test_start < test_end)
-                num_correct += worker.do_job(test_start, test_end);
+                score += worker.do_job(test_start, test_end);
         }
 
     } else {
@@ -470,7 +488,7 @@ double crossvalidate(
             workers.push_back(new detail::cv_worker<label_type>(
                 shuff_divs, num_bags, shuff_labels, kernels,
                 svm_p, c_vals, tuning_folds, project_all_data, pred_div_params,
-                jobs_mutex, jobs, results_mutex, num_correct, errors[i]
+                jobs_mutex, jobs, results_mutex, score, errors[i]
             ));
             worker_threads.create_thread(boost::ref(workers[i]));
         }
@@ -485,8 +503,12 @@ double crossvalidate(
     delete kernels;
     delete[] shuff_divs;
 
-    // return accuracy
-    return double(num_correct) / num_bags;
+    // return accuracy / RMSE
+    if (boost::is_same<label_type, int>::value) {
+        return score / num_bags;
+    } else {
+        return std::sqrt(score / num_bags);
+    }
 }
 
 
