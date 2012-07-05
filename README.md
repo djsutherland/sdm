@@ -1,5 +1,5 @@
-This is a C++ implementation (with a Matlab MEX interface) of Support Distribution
-Machines, as described by:
+This is a C++ implementation (with C and Matlab MEX interfaces) of Support
+Distribution Machines, as described by:
 
 Barnabas Poczos, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider.
 _Nonparametric Kernel Estimators for Image Classification._
@@ -21,6 +21,7 @@ Requirements
   * [Boost](http://boost.org) at least 1.35
   * [CMake](http://cmake.org)
   * BLAS and LAPACK implementations
+  * A working FORTRAN compiler (to use BLAS/LAPACK)
 
 Installation
 ------------
@@ -32,7 +33,8 @@ Installation
     make install
 
 This will install the shared library named e.g. `libsdm.so` (depending on
-platform) and header files. By default, these will be placed in `/usr/local`;
-to install to a different location, use something like:
+platform) and header files, as well as an `sdm-run` binary and a MEX file to
+`share/sdm/matlab`. By default, these will be placed in `/usr/local`; to
+install to a different location, use something like:
 
     cmake .. -DCMAKE_INSTALL_PREFIX=$HOME
