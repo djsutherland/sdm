@@ -158,7 +158,7 @@ PRED(SDM_RegressF, float,  double);
         const classname * sdm,\
         const intype * test_bag,\
         size_t rows,\
-        intype ** vals,\
+        double ** vals,\
         size_t * num_vals)
 PRED_V(SDM_ClassifyD, double, int);
 PRED_V(SDM_ClassifyF, float,  int);
