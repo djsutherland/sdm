@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 
@@ -166,6 +167,8 @@ class EasySmallSDMTest : public ::testing::Test {
     double **test_raw;
     Matrix test[NUM_TEST];
     std::vector<int> test_labels;
+    std::vector<double> test_means;
+    std::vector<double> test_stds;
 
     npdivs::DivParams div_params;
     svm_parameter svm_params;
@@ -207,6 +210,8 @@ class EasySmallSDMTest : public ::testing::Test {
         }
 
         test_labels.resize(NUM_TEST);
+        test_means.resize(NUM_TEST);
+        test_stds.resize(NUM_TEST);
 
         test_raw = new double*[NUM_TEST];
         size_t i = 0;
@@ -216,6 +221,8 @@ class EasySmallSDMTest : public ::testing::Test {
         test_raw[i] = new double[10]; std::copy(test11, test11+10, test_raw[i]);
         test[i] = Matrix(test_raw[i], 10, 1);
         test_labels[i] = 0;
+        test_means[i] = 0;
+        test_stds[i] = 1;
         i++;
 
         // 5 from N(0, 1)
@@ -223,6 +230,8 @@ class EasySmallSDMTest : public ::testing::Test {
         test_raw[i] = new double[5]; std::copy(test12, test12+5, test_raw[i]);
         test[i] = Matrix(test_raw[i], 5, 1);
         test_labels[i] = 0;
+        test_means[i] = 0;
+        test_stds[i] = 1;
         i++;
 
         // 10 from N(2, .5)
@@ -230,6 +239,8 @@ class EasySmallSDMTest : public ::testing::Test {
         test_raw[i] = new double[10]; std::copy(test21, test21+10, test_raw[i]);
         test[i] = Matrix(test_raw[i], 5, 1);
         test_labels[i] = 1;
+        test_means[i] = 2;
+        test_stds[i] = .5;
         i++;
 
         // 5 from N(2, .5)
@@ -237,6 +248,8 @@ class EasySmallSDMTest : public ::testing::Test {
         test_raw[i] = new double[5]; std::copy(test22, test22+5, test_raw[i]);
         test[i] = Matrix(test_raw[i], 5, 1);
         test_labels[i] = 1;
+        test_means[i] = 2;
+        test_stds[i] = .5;
         i++;
     }
 
@@ -272,6 +285,39 @@ class EasySmallSDMTest : public ::testing::Test {
         return vals;
     }
 
+    double testTrainTestRegression(
+            const vector<double> &train_labs,
+            const vector<double> &test_labs,
+            double tol,
+            const npdivs::DivFunc &div_func,
+            const KernelGroup &kernel_group,
+            const vector<double> &cs = default_c_vals,
+            size_t tuning_folds = NUM_TRAIN)
+    {
+        // train up the model
+        SDM<double, double> *model = train_sdm(train, num_train, train_labs,
+                div_func, kernel_group, div_params, cs, svm_params,
+                tuning_folds);
+
+        // predict on test data
+        vector<double> pred_lab = model->predict(test, num_test);
+
+        // check that labels are as expected
+        double rmse = 0;
+        for (size_t i = 0; i < num_test; i++) {
+            double diff = test_labels[i] - pred_lab[i];
+            rmse += diff * diff;
+            EXPECT_LT(std::abs(diff), tol) << "bad pred for #" << i;
+        }
+
+        // clean up the model
+        model->destroyModelAndProb();
+        delete model;
+
+        return std::sqrt(rmse / NUM_TEST);
+    }
+
+
     double testCV(
             size_t folds,
             const npdivs::DivFunc &div_func,
@@ -303,6 +349,9 @@ class EasySmallSDMTest : public ::testing::Test {
             tuning_folds);
     }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+// Test basic classification
 
 TEST_F(EasySmallSDMTest, BasicTrainingTesting) {
     npdivs::DivL2 div_func;
@@ -340,6 +389,60 @@ TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
     const vector< vector<double> > &vals =
         testTrainTest(div_func, kernel_group);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Test basic regression
+
+TEST_F(EasySmallSDMTest, RenyiCVTrainingTestingMeans) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testTrainTestRegression(means, test_means, 1,
+            div_func, kernel_group);
+    cout << "RMSE: " << rmse << "\n";
+}
+
+TEST_F(EasySmallSDMTest, PolyCVTrainingTestingMeans) {
+    npdivs::DivRenyi div_func(.99);
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testTrainTestRegression(means, test_means, 1,
+            div_func, kernel_group);
+    cout << "RMSE: " << rmse << "\n";
+}
+
+TEST_F(EasySmallSDMTest, RenyiCVTrainingTestingStds) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testTrainTestRegression(stds, test_stds, .4,
+            div_func, kernel_group);
+    cout << "RMSE: " << rmse << "\n";
+}
+
+TEST_F(EasySmallSDMTest, PolyCVTrainingTestingStds) {
+    npdivs::DivRenyi div_func(.99);
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testTrainTestRegression(stds, test_stds, .4,
+            div_func, kernel_group);
+    cout << "RMSE: " << rmse << "\n";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Test classification CV
 
 TEST_F(EasySmallSDMTest, CVPolySingleThreaded) {
     npdivs::DivLinear div_func;
@@ -415,6 +518,8 @@ TEST_F(EasySmallSDMTest, CVRenyiDefaultThreaded) {
     EXPECT_GE(acc, .7);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Test regression CV
 
 TEST_F(EasySmallSDMTest, CVPolyMeans) {
     npdivs::DivLinear div_func;
@@ -466,8 +571,9 @@ TEST_F(EasySmallSDMTest, CVRenyiStds) {
 
 } // end namespace
 
+
 int main(int argc, char **argv) {
-    FILELog::ReportingLevel() = logWARNING;
+    FILELog::ReportingLevel() = logDEBUG2;
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

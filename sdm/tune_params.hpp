@@ -338,7 +338,7 @@ std::pair<size_t, size_t> tune_params(
             boost::rethrow_exception(errors[i]);
 
     // get all the best configs into one vector
-    size_t best_score = *std::max_element(
+    double best_score = *std::max_element(
             scores.begin(), scores.end());
     std::vector<config> best_configs;
 
