@@ -7,6 +7,12 @@ target_link_libraries(sdm_tests
     gtest
 )
 
+add_executable(test_c_interface test_c_interface.c)
+target_link_libraries(test_c_interface
+    sdm
+    flann
+)
+
 add_custom_target(runtests
     COMMAND sdm_tests
     DEPENDS sdm_tests
