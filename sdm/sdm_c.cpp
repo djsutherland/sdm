@@ -34,8 +34,8 @@
  * POSSIBILITY OF SUCH DAMAGE.                                                 *
  ******************************************************************************/
 #include "sdm/sdm.hpp"
-#include "sdm/sdm_c.h"
 #include "sdm/kernels/from_str.hpp"
+#include "sdm/sdm_c.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -54,49 +54,46 @@ using flann::Matrix;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct SDMObjDouble_s { SDM<double> *sdm; };
-struct SDMObjFloat_s  { SDM<float>  *sdm; };
-
-const char *SDMObjDouble_getName(SDMObjDouble *sdm) {
-    return sdm->sdm->name().c_str();
+void sdm_set_log_level(enum TLogLevel level) {
+    FILELog::ReportingLevel() = level;
 }
-const char *SDMObjFloat_getName(SDMObjFloat *sdm) {
-    return sdm->sdm->name().c_str();
+enum TLogLevel sdm_get_log_level() {
+    return FILELog::ReportingLevel();
 }
 
-void SDMObjDouble_freeModel(SDMObjDouble *sdm) {
-    SDM<double> *m = sdm->sdm;
-    m->destroyModelAndProb();
-    m->destroyTrainBagMatrices();
-    delete m;
+
+struct SDM_ClassifyD_s { SDM<double, int> *sdm; };
+struct SDM_ClassifyF_s { SDM<float,  int> *sdm; };
+struct SDM_RegressD_s  { SDM<double, double> *sdm; };
+struct SDM_RegressF_s  { SDM<float,  double> *sdm; };
+
+#define GET_NAME(classname) \
+const char * classname##_getName(classname *sdm) { \
+    return sdm->sdm->name().c_str(); \
 }
-void SDMObjFloat_freeModel(SDMObjFloat *sdm) {
-    SDM<float> *m = sdm->sdm;
-    m->destroyModelAndProb();
-    m->destroyTrainBagMatrices();
-    delete m;
+GET_NAME(SDM_ClassifyD);
+GET_NAME(SDM_ClassifyF);
+GET_NAME(SDM_RegressD);
+GET_NAME(SDM_RegressF);
+#undef GET_NAME
+
+
+#define FREE_MODEL(classname, intype, labtype) \
+void classname##_freeModel(classname * sdm) { \
+    SDM<intype, labtype> * m = sdm->sdm; \
+    m->destroyModelAndProb(); \
+    m->destroyTrainBagMatrices(); \
+    delete m; \
 }
+FREE_MODEL(SDM_ClassifyD, double, int);
+FREE_MODEL(SDM_ClassifyF, float,  int);
+FREE_MODEL(SDM_RegressD,  double, double);
+FREE_MODEL(SDM_RegressF,  float,  double);
+#undef FREE_MODEL
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const struct svm_parameter default_svm_params = {
-    C_SVC, // svm_type
-    PRECOMPUTED, // kernel_type
-    0,    // degree - not used
-    0,    // gamma - not used
-    0,    // coef0 - not used
-    1024, // cache_size, in MB
-    1e-3, // eps
-    1,    // C
-    0,    // nr_weight
-    NULL, // weight_label
-    NULL, // weight
-    0,    // nu - not used
-    0,    // p - not used
-    1,    // shrinking
-    0     // probability
-};
-
+const struct svm_parameter default_svm_params = sdm::default_svm_params;
 
 // copied from flann/flann.cpp
 flann::IndexParams create_parameters(const FLANNParameters* p)
@@ -177,13 +174,13 @@ Matrix<T> *make_matrices(T ** data,
 ////////////////////////////////////////////////////////////////////////////////
 // training functions
 
-template<typename T>
-SDM<T> *train_sdm_(
-        const T **train_bags,
+template <typename Scalar, typename label_type>
+SDM<Scalar, label_type> *train_sdm_(
+        const Scalar **train_bags,
         size_t num_train,
         size_t dim,
         const size_t * rows,
-        const int *labels,
+        const label_type *labels,
         const char *div_func_spec,
         const char *kernel_spec,
         const DivParamsC *div_params,
@@ -194,15 +191,16 @@ SDM<T> *train_sdm_(
 {
     // NOTE: allocates Matrix objects for your data
     // caller needs to free them
-    Matrix<T> *train_bags_m = make_matrices(const_cast<T **>(train_bags),
+    Matrix<Scalar> *train_bags_m = make_matrices(
+            const_cast<Scalar **>(train_bags),
             num_train, rows, dim);
 
     npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
     KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    SDM<T> *sdm = train_sdm(
+    SDM<Scalar, label_type> *sdm = train_sdm(
             train_bags_m, num_train,
-            std::vector<int>(labels, labels + num_train),
+            std::vector<label_type>(labels, labels + num_train),
             *df,
             *kernel,
             make_div_params(div_params),
@@ -217,283 +215,218 @@ SDM<T> *train_sdm_(
     return sdm;
 }
 
-SDMObjDouble *train_sdm_double(
-        const double **train_bags, size_t num_train,
-        size_t dim, const size_t * rows,
-        const int *labels, const char *div_func_spec, const char *kernel_spec,
-        const DivParamsC *div_params, const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params, size_t tuning_folds,
-        double *divs)
-{
-    SDM<double> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
-            div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
-            svm_params, tuning_folds, divs);
-    SDMObjDouble *ret = (SDMObjDouble *) malloc(sizeof(SDMObjDouble *));
-    ret->sdm = sdm;
-    return ret;
+#define TRAIN(classname, intype, labtype) \
+classname * classname##_train(\
+        const intype **train_bags,\
+        size_t num_train,\
+        size_t dim,\
+        const size_t * rows,\
+        const labtype * labels,\
+        const char * div_func_spec,\
+        const char * kernel_spec,\
+        const DivParamsC *div_params,\
+        const double * c_vals, size_t num_c_vals,\
+        const struct svm_parameter * svm_params,\
+        size_t tuning_folds,\
+        double * divs) \
+{ \
+    SDM<intype, labtype> *sdm = train_sdm_( \
+            train_bags, num_train, dim, rows, labels, \
+            div_func_spec, kernel_spec, div_params, c_vals, num_c_vals, \
+            svm_params, tuning_folds, divs); \
+    classname *ret = (classname *) malloc(sizeof(classname *)); \
+    ret->sdm = sdm; \
+    return ret; \
 }
-
-SDMObjFloat *train_sdm_float(
-        const float **train_bags, size_t num_train,
-        size_t dim, const size_t * rows,
-        const int *labels, const char *div_func_spec, const char *kernel_spec,
-        const DivParamsC *div_params, const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params, size_t tuning_folds,
-        double *divs)
-{
-    SDM<float> *sdm = train_sdm_(train_bags, num_train, dim, rows, labels,
-            div_func_spec, kernel_spec, div_params, c_vals, num_c_vals,
-            svm_params, tuning_folds, divs);
-    SDMObjFloat *ret = (SDMObjFloat *) malloc(sizeof(SDMObjFloat *));
-    ret->sdm = sdm;
-    return ret;
-}
+TRAIN(SDM_ClassifyD, double, int);
+TRAIN(SDM_ClassifyF, float,  int);
+TRAIN(SDM_RegressD,  double, double);
+TRAIN(SDM_RegressF,  float,  double);
+#undef TRAIN
 
 ////////////////////////////////////////////////////////////////////////////////
 // prediction functions
 
 // single item, label only
-int sdm_predict_double(
-        const SDMObjDouble *sdm,
-        const double * test_bag, size_t rows)
-{
-    int ret;
-    sdm_predict_many_double(sdm, &test_bag, 1, &rows, &ret);
-    return ret;
+#define PRED(classname, intype, labtype) labtype classname##_predict(\
+        const classname * sdm,\
+        const intype * test_bag,\
+        size_t rows) {\
+    labtype ret; \
+    classname##_predict_many(sdm, &test_bag, 1, &rows, &ret); \
+    return ret; \
 }
+PRED(SDM_ClassifyD, double, int);
+PRED(SDM_ClassifyF, float,  int);
+PRED(SDM_RegressD, double, double);
+PRED(SDM_RegressF, float,  double);
+#undef PRED
 
-int sdm_predict_float(
-        const SDMObjFloat *sdm,
-        const float * test_bag, size_t rows)
-{
-    int ret;
-    sdm_predict_many_float(sdm, &test_bag, 1, &rows, &ret);
-    return ret;
-}
 
 // single item, with decision values
 // (allocating the storage for the values and changing vals to point to it)
-int sdm_predict_vals_double(
-        const SDMObjDouble *sdm,
-        const double * test_bag, size_t rows,
-        double ** vals, size_t * num_vals)
-{
-    int ret;
-    sdm_predict_many_vals_double(
-            sdm, &test_bag, 1, &rows, &ret, &vals, num_vals);
-    return ret;
+#define PRED_V(classname, intype, labtype) labtype classname##_predict_vals(\
+        const classname * sdm,\
+        const intype * test_bag,\
+        size_t rows,\
+        double ** vals,\
+        size_t * num_vals) { \
+    labtype ret; \
+    classname##_predict_many_vals( \
+            sdm, &test_bag, 1, &rows, &ret, &vals, num_vals); \
+    return ret; \
 }
-int sdm_predict_vals_float(
-        const SDMObjFloat *sdm,
-        const float * test_bag, size_t rows,
-        double ** vals, size_t * num_vals)
-{
-    int ret;
-    sdm_predict_many_vals_float(
-            sdm, &test_bag, 1, &rows, &ret, &vals, num_vals);
-    return ret;
-}
+PRED_V(SDM_ClassifyD, double, int);
+PRED_V(SDM_ClassifyF, float,  int);
+PRED_V(SDM_RegressD, double, double);
+PRED_V(SDM_RegressF, float,  double);
+#undef PRED_V
 
 
 // several items, labels only
-void sdm_predict_many_double(
-        const SDMObjDouble *sdm,
-        const double ** test_bags, size_t num_test, const size_t * rows,
-        int *labels)
-{
-    Matrix<double> *test_bags_m = make_matrices(
-            const_cast<double **>(test_bags), num_test, rows,
-            sdm->sdm->getDim());
-
-    vector<int> labels_v = sdm->sdm->predict(test_bags_m, num_test);
-
-    delete[] test_bags_m;
-    std::copy(labels_v.begin(), labels_v.end(), labels);
+#define PRED_M(classname, intype, labtype) void classname##_predict_many(\
+        const classname * sdm,\
+        const intype ** test_bags,\
+        size_t num_test,\
+        const size_t * rows,\
+        labtype * labels) { \
+    Matrix<intype> *test_bags_m = make_matrices( \
+            const_cast<intype **>(test_bags), num_test, rows, \
+            sdm->sdm->getDim()); \
+    \
+    vector<labtype> labels_v = sdm->sdm->predict(test_bags_m, num_test); \
+    \
+    delete[] test_bags_m; \
+    std::copy(labels_v.begin(), labels_v.end(), labels); \
 }
+PRED_M(SDM_ClassifyD, double, int);
+PRED_M(SDM_ClassifyF, float,  int);
+PRED_M(SDM_RegressD, double, double);
+PRED_M(SDM_RegressF, float,  double);
+#undef PRED_M
 
-
-void sdm_predict_many_float(
-        const SDMObjFloat *sdm,
-        const float ** test_bags, size_t num_test, const size_t * rows,
-        int *labels)
-{
-    Matrix<float> *test_bags_m = make_matrices(
-            const_cast<float **>(test_bags), num_test, rows,
-            sdm->sdm->getDim());
-
-    vector<int> labels_v = sdm->sdm->predict(test_bags_m, num_test);
-
-    delete[] test_bags_m;
-    std::copy(labels_v.begin(), labels_v.end(), labels);
-}
 
 // several items, with decision values
-void sdm_predict_many_vals_double(
-        const SDMObjDouble *sdm,
-        const double ** test_bags, size_t num_test, const size_t * rows,
-        int *labels,
-        double *** vals, size_t * num_vals)
-{
-    Matrix<double> *test_bags_m = make_matrices(
-            const_cast<double **>(test_bags), num_test, rows,
-            sdm->sdm->getDim());
-
-    vector< vector<double> > vals_v;
-
-    vector<int> labels_v = sdm->sdm->predict(test_bags_m, num_test, vals_v);
-
-    delete[] test_bags_m;
-    std::copy(labels_v.begin(), labels_v.end(), labels);
-
-    vals[0] = (double **) std::malloc(num_test * sizeof(double *));
-    size_t real_num_vals = vals_v[0].size();
-    *num_vals = real_num_vals;
-
-    for (size_t i = 0; i < num_test; i++) {
-        vals[0][i] = (double *) std::malloc(real_num_vals * sizeof(double));
-        std::copy(vals_v[i].begin(), vals_v[i].end(), vals[0][i]);
-    }
+#define PRED_MV(classname, intype, labtype) void classname##_predict_many_vals(\
+        const classname * sdm,\
+        const intype ** test_bags,\
+        size_t num_test,\
+        const size_t * rows,\
+        labtype * labels,\
+        double *** vals,\
+        size_t * num_vals) { \
+    Matrix<intype> *test_bags_m = make_matrices( \
+            const_cast<intype **>(test_bags), num_test, rows, \
+            sdm->sdm->getDim()); \
+    \
+    vector< vector<double> > vals_v; \
+    \
+    vector<labtype> labels_v = \
+        sdm->sdm->predict(test_bags_m, num_test, vals_v); \
+    \
+    delete[] test_bags_m; \
+    std::copy(labels_v.begin(), labels_v.end(), labels); \
+    \
+    vals[0] = (double **) std::malloc(num_test * sizeof(double *)); \
+    size_t real_num_vals = vals_v[0].size(); \
+    *num_vals = real_num_vals; \
+    \
+    for (size_t i = 0; i < num_test; i++) { \
+        vals[0][i] = (double *) std::malloc(real_num_vals * sizeof(double)); \
+        std::copy(vals_v[i].begin(), vals_v[i].end(), vals[0][i]); \
+    } \
 }
+PRED_MV(SDM_ClassifyD, double, int);
+PRED_MV(SDM_ClassifyF, float,  int);
+PRED_MV(SDM_RegressD, double, double);
+PRED_MV(SDM_RegressF, float,  double);
+#undef PRED_MV
 
-
-void sdm_predict_many_vals_float(
-        const SDMObjFloat *sdm,
-        const float ** test_bags, size_t num_test, const size_t * rows,
-        int *labels,
-        double *** vals, size_t * num_vals)
-{
-    Matrix<float> *test_bags_m = make_matrices(
-            const_cast<float **>(test_bags), num_test, rows,
-            sdm->sdm->getDim());
-
-    vector< vector<double> > vals_v;
-
-    vector<int> labels_v = sdm->sdm->predict(test_bags_m, num_test, vals_v);
-
-    delete[] test_bags_m;
-    std::copy(labels_v.begin(), labels_v.end(), labels);
-
-    vals[0] = (double **) std::malloc(num_test * sizeof(double *));
-    size_t real_num_vals = vals_v[0].size();
-    *num_vals = real_num_vals;
-
-    for (size_t i = 0; i < num_test; i++) {
-        vals[0][i] = (double *) std::malloc(real_num_vals * sizeof(double));
-        std::copy(vals_v[i].begin(), vals_v[i].end(), vals[0][i]);
-    }
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // cross-validation
 
-double crossvalidate_bags_double(
-        const double ** bags,
-        size_t num_bags,
-        const size_t *rows,
-        size_t dim,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds)
-{
-    Matrix<double> *bags_m = make_matrices(
-            const_cast<double **>(bags), num_bags, rows, dim);
-    
-    npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
-    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
-
-    double acc = crossvalidate(
-            bags_m, num_bags,
-            vector<int>(labels, labels + num_bags),
-            *df, *kernel,
-            make_div_params(div_params),
-            folds, num_cv_threads,
-            (bool) project_all_data, (bool) shuffle_order,
-            vector<double>(c_vals, c_vals + num_c_vals),
-            *svm_params,
-            tuning_folds);
-
-    delete kernel;
-    delete df;
-    delete[] bags_m;
-
-    return acc;
+// cross-validate on bags
+#define CV(name, intype, labtype) \
+    double sdm_crossvalidate_##name##_##intype(\
+        const intype ** bags,\
+        size_t num_bags,\
+        const size_t * rows,\
+        size_t dim,\
+        const labtype * labels,\
+        const char * div_func_spec,\
+        const char * kernel_spec,\
+        const DivParamsC * div_params,\
+        size_t folds,\
+        size_t num_cv_threads,\
+        short project_all_data,\
+        short shuffle_order,\
+        const double * c_vals,\
+        size_t num_c_vals,\
+        const struct svm_parameter * svm_params,\
+        size_t tuning_folds) \
+{ \
+    Matrix<intype> *bags_m = make_matrices( \
+            const_cast<intype **>(bags), num_bags, rows, dim); \
+    \
+    npdivs::DivFunc *df = div_func_from_str(string(div_func_spec)); \
+    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
+    \
+    double acc = crossvalidate( \
+            bags_m, num_bags, \
+            vector<labtype>(labels, labels + num_bags), \
+            *df, *kernel, \
+            make_div_params(div_params), \
+            folds, num_cv_threads, \
+            (bool) project_all_data, (bool) shuffle_order, \
+            vector<double>(c_vals, c_vals + num_c_vals), \
+            *svm_params, \
+            tuning_folds); \
+    \
+    delete kernel; \
+    delete df; \
+    delete[] bags_m; \
+    \
+    return acc; \
 }
+CV(classify, double, int);
+CV(classify, float,  int);
+CV(regress,  double, double);
+CV(regress,  float,  double);
+#undef CV
 
-double crossvalidate_bags_float(
-        const float **bags,
-        size_t num_bags,
-        const size_t *rows,
-        size_t dim,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds)
-{
-    Matrix<float> *bags_m = make_matrices(
-            const_cast<float **>(bags), num_bags, rows, dim);
-    
-    npdivs::DivFunc *df = div_func_from_str(string(div_func_spec));
-    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
 
-    double acc = crossvalidate(
-            bags_m, num_bags,
-            vector<int>(labels, labels + num_bags),
-            *df, *kernel,
-            make_div_params(div_params),
-            folds, num_cv_threads,
-            (bool) project_all_data, (bool) shuffle_order,
-            vector<double>(c_vals, c_vals + num_c_vals),
-            *svm_params,
-            tuning_folds);
-
-    delete kernel;
-    delete df;
-    delete[] bags_m;
-
-    return acc;
+// cross-validate on precomputed divs
+#define CV_divs(name, labtype) \
+    double crossvalidate_##name##_divs(\
+        const double * divs,\
+        size_t num_bags,\
+        const labtype *labels,\
+        const char *kernel_spec,\
+        size_t folds,\
+        size_t num_cv_threads,\
+        short project_all_data,\
+        short shuffle_order,\
+        const double *c_vals, size_t num_c_vals,\
+        const struct svm_parameter *svm_params,\
+        size_t tuning_folds) \
+{ \
+    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
+    \
+    double acc = crossvalidate<labtype>( \
+            divs, num_bags, \
+            vector<labtype>(labels, labels + num_bags), \
+            *kernel, \
+            folds, num_cv_threads, \
+            (bool) project_all_data, (bool) shuffle_order, \
+            vector<double>(c_vals, c_vals + num_c_vals), \
+            *svm_params, \
+            tuning_folds); \
+    \
+    delete kernel; \
+    return acc; \
 }
-
-double crossvalidate_divs(
-        const double * divs,
-        size_t num_bags,
-        const int *labels,
-        const char *kernel_spec,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds)
-{
-    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec));
-
-    double acc = crossvalidate(
-            divs, num_bags,
-            vector<int>(labels, labels + num_bags),
-            *kernel,
-            folds, num_cv_threads,
-            (bool) project_all_data, (bool) shuffle_order,
-            vector<double>(c_vals, c_vals + num_c_vals),
-            *svm_params,
-            tuning_folds);
-
-    delete kernel;
-    return acc;
-}
+CV_divs(classify, int);
+CV_divs(regress,  double);
+#undef CV_divs

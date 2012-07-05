@@ -35,6 +35,8 @@
 #ifndef SDM_C_H_
 #define SDM_C_H_
 
+// TODO: better error handling from this api
+
 #include <stddef.h>
 
 #include <flann/flann.h>
@@ -51,26 +53,24 @@ extern "C" {
 // means if including both this header and svm.h, this one MUST come second.
 // (This should only be possible in C++ code, because of the namespash clash.)
 
-
-struct svm_parameter
-{
-	int svm_type;
-	int kernel_type;
-	int degree;	/* for poly */
-	double gamma;	/* for poly/rbf/sigmoid */
-	double coef0;	/* for poly/sigmoid */
-
-	/* these are for training only */
-	double cache_size; /* in MB */
-	double eps;	/* stopping criteria */
-	double C;	/* for C_SVC, EPSILON_SVR and NU_SVR */
-	int nr_weight;		/* for C_SVC */
-	int *weight_label;	/* for C_SVC */
-	double* weight;		/* for C_SVC */
-	double nu;	/* for NU_SVC, ONE_CLASS, and NU_SVR */
-	double p;	/* for EPSILON_SVR */
-	int shrinking;	/* use the shrinking heuristics */
-	int probability; /* do probability estimates */
+struct svm_parameter {
+    int svm_type;
+    int kernel_type;
+    int degree;	/* for poly */
+    double gamma;	/* for poly/rbf/sigmoid */
+    double coef0;	/* for poly/sigmoid */
+    
+    /* these are for training only */
+    double cache_size; /* in MB */
+    double eps;	/* stopping criteria */
+    double C;	/* for C_SVC, EPSILON_SVR and NU_SVR */
+    int nr_weight;		/* for C_SVC */
+    int *weight_label;	/* for C_SVC */
+    double* weight;		/* for C_SVC */
+    double nu;	/* for NU_SVC, ONE_CLASS, and NU_SVR */
+    double p;	/* for EPSILON_SVR */
+    int shrinking;	/* use the shrinking heuristics */
+    int probability; /* do probability estimates */
 };
 
 enum { C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR };
@@ -81,6 +81,16 @@ const extern struct svm_parameter default_svm_params;
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __LOG_H__
+// Want access to log-level constants. If including both this file and
+// log.hpp, the latter must be included first.
+enum TLogLevel {logERROR, logWARNING, logINFO,
+    logDEBUG, logDEBUG1, logDEBUG2, logDEBUG3, logDEBUG4};
+#endif
+
+void sdm_set_log_level(enum TLogLevel level);
+enum TLogLevel sdm_get_log_level();
 
 // C equivalent of the DivParams class
 typedef struct DivParamsC_s {
@@ -94,137 +104,138 @@ typedef struct DivParamsC_s {
 
 // C structs so we can return an SDM object from these methods
 // declared to have a single SDM<double> or SDM<float> member
-struct SDMObjDouble_s;
-struct SDMObjFloat_s;
-typedef struct SDMObjDouble_s SDMObjDouble;
-typedef struct SDMObjFloat_s  SDMObjFloat;
+typedef struct SDM_ClassifyD_s SDM_ClassifyD;
+typedef struct SDM_ClassifyF_s SDM_ClassifyF;
+typedef struct SDM_RegressD_s  SDM_RegressD;
+typedef struct SDM_RegressF_s  SDM_RegressF;
 
-const char *SDMObjDouble_getName(SDMObjDouble *sdm);
-const char *SDMObjFloat_getName (SDMObjFloat  *sdm);
+const char *SDM_ClassifyD_getName(SDM_ClassifyD *sdm);
+const char *SDM_ClassifyF_getName(SDM_ClassifyF *sdm);
+const char *SDM_RegressD_getName (SDM_RegressD *sdm);
+const char *SDM_RegressF_getName (SDM_RegressF *sdm);
 
 // free SDM memory; doesn't free the data itself, though
-void SDMObjDouble_freeModel(SDMObjDouble *sdm);
-void SDMObjFloat_freeModel(SDMObjDouble *sdm);
+void SDM_ClassifyD_freeModel(SDM_ClassifyD *sdm);
+void SDM_ClassifyF_freeModel(SDM_ClassifyF *sdm);
+void SDM_RegressD_freeModel (SDM_RegressD *sdm);
+void SDM_RegressF_freeModel (SDM_RegressF *sdm);
 
 // functions to train SDMs with
-SDMObjDouble *train_sdm_double(
-        const double **train_bags,
-        size_t num_train,
-        size_t dim,
-        const size_t * rows,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds,
-        double *divs);
-SDMObjFloat *train_sdm_float(
-        const float **train_bags,
-        size_t num_train,
-        size_t dim,
-        const size_t * rows,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds,
-        double *divs);
+#define TRAIN(classname, intype, labtype) classname * classname##_train(\
+        const intype **train_bags,\
+        size_t num_train,\
+        size_t dim,\
+        const size_t * rows,\
+        const labtype * labels,\
+        const char * div_func_spec,\
+        const char * kernel_spec,\
+        const DivParamsC *div_params,\
+        const double * c_vals, size_t num_c_vals,\
+        const struct svm_parameter * svm_params,\
+        size_t tuning_folds,\
+        double * divs)
+TRAIN(SDM_ClassifyD, double, int);
+TRAIN(SDM_ClassifyF, float,  int);
+TRAIN(SDM_RegressD, double, double);
+TRAIN(SDM_RegressF, float,  double);
+#undef TRAIN
 
 // prediction functions
 // single item, label only
-int sdm_predict_double(
-        const SDMObjDouble *sdm,
-        const double* test_bag, size_t rows);
-int sdm_predict_float(
-        const SDMObjFloat *sdm,
-        const float* test_bag, size_t rows);
+#define PRED(classname, intype, labtype) labtype classname##_predict(\
+        const classname * sdm,\
+        const intype * test_bag,\
+        size_t rows)
+PRED(SDM_ClassifyD, double, int);
+PRED(SDM_ClassifyF, float,  int);
+PRED(SDM_RegressD, double, double);
+PRED(SDM_RegressF, float,  double);
+#undef PRED
 
 // single item, with decision values
 // (allocating the storage for the values and changing vals to point to it)
-int sdm_predict_vals_double(
-        const SDMObjDouble *sdm,
-        const double * test_bag, const size_t rows,
-        double ** vals, size_t * num_vals);
-int sdm_predict_vals_float(
-        const SDMObjFloat *sdm,
-        const float* test_bag, const size_t rows,
-        double ** vals, size_t * num_vals);
+#define PRED_V(classname, intype, labtype) labtype classname##_predict_vals(\
+        const classname * sdm,\
+        const intype * test_bag,\
+        size_t rows,\
+        intype ** vals,\
+        size_t * num_vals)
+PRED_V(SDM_ClassifyD, double, int);
+PRED_V(SDM_ClassifyF, float,  int);
+PRED_V(SDM_RegressD, double, double);
+PRED_V(SDM_RegressF, float,  double);
+#undef PRED_V
 
 // several items, labels only
-void sdm_predict_many_double(
-        const SDMObjDouble *sdm,
-        const double ** test_bags, size_t num_test, const size_t * rows,
-        int *labels);
-void sdm_predict_many_float(
-        const SDMObjFloat *sdm,
-        const float ** test_bags, size_t num_test, const size_t * rows,
-        int *labels);
+#define PRED_M(classname, intype, labtype) void classname##_predict_many(\
+        const classname * sdm,\
+        const intype ** test_bags,\
+        size_t num_test,\
+        const size_t * rows,\
+        labtype * labels)
+PRED_M(SDM_ClassifyD, double, int);
+PRED_M(SDM_ClassifyF, float,  int);
+PRED_M(SDM_RegressD, double, double);
+PRED_M(SDM_RegressF, float,  double);
+#undef PRED_M
 
 // several items, with decision values
-void sdm_predict_many_vals_double(
-        const SDMObjDouble *sdm,
-        const double ** test_bags, size_t num_test, const size_t * rows,
-        int *labels,
-        double *** vals, size_t * num_vals);
-void sdm_predict_many_vals_float(
-        const SDMObjFloat *sdm,
-        const float ** test_bags, size_t num_test, const size_t * rows,
-        int *labels,
-        double *** vals, size_t * num_vals);
+#define PRED_MV(classname, intype, labtype) void classname##_predict_many_vals(\
+        const classname * sdm,\
+        const intype ** test_bags,\
+        size_t num_test,\
+        const size_t * rows,\
+        labtype * labels,\
+        double *** vals,\
+        size_t * num_vals)
+PRED_MV(SDM_ClassifyD, double, int);
+PRED_MV(SDM_ClassifyF, float,  int);
+PRED_MV(SDM_RegressD, double, double);
+PRED_MV(SDM_RegressF, float,  double);
+#undef PRED_MV
 
+// cross-validate on bags
+#define CV(name, intype, labtype) \
+    double sdm_crossvalidate_##name##_##intype(\
+        const intype ** bags,\
+        size_t num_bags,\
+        const size_t * rows,\
+        size_t dim,\
+        const labtype * labels,\
+        const char * div_func_spec,\
+        const char * kernel_spec,\
+        const DivParamsC * div_params,\
+        size_t folds,\
+        size_t num_cv_threads,\
+        short project_all_data,\
+        short shuffle_order,\
+        const double * c_vals,\
+        size_t num_c_vals,\
+        const struct svm_parameter * svm_params,\
+        size_t tuning_folds)
+CV(classify, double, int);
+CV(classify, float,  int);
+CV(regress,  double, double);
+CV(regress,  float,  double);
+#undef CV
 
-// functions to run cross-validation with
-double crossvalidate_bags_double(
-        const double ** bags,
-        size_t num_bags,
-        const size_t *rows,
-        size_t dim,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds);
-
-double crossvalidate_bags_float(
-        const float ** bags,
-        size_t num_bags,
-        const size_t *rows,
-        size_t dim,
-        const int *labels,
-        const char *div_func_spec,
-        const char *kernel_spec,
-        const DivParamsC *div_params,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds);
-
-double crossvalidate_divs(
-        const double * divs,
-        size_t num_bags,
-        const int *labels,
-        const char *kernel_spec,
-        size_t folds,
-        size_t num_cv_threads,
-        short project_all_data,
-        short shuffle_order,
-        const double *c_vals, size_t num_c_vals,
-        const struct svm_parameter *svm_params,
-        size_t tuning_folds);
-
+// cross-validate on precomputed divs
+#define CV_divs(name, labtype) \
+    double crossvalidate_##name##_divs(\
+        const double * divs,\
+        size_t num_bags,\
+        const labtype *labels,\
+        const char *kernel_spec,\
+        size_t folds,\
+        size_t num_cv_threads,\
+        short project_all_data,\
+        short shuffle_order,\
+        const double *c_vals, size_t num_c_vals,\
+        const struct svm_parameter *svm_params,\
+        size_t tuning_folds)
+CV_divs(classify, int);
+CV_divs(regress, double);
+#undef CV_divs
 
 #ifdef __cplusplus
 } // extern

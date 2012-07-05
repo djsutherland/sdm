@@ -3,8 +3,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#define num_data 7
-#define dim 2
+#define NUM_BAGS 7
+#define PTS_PER_BAG 3
+#define DIM 2
 
 void print_progress(size_t n) {
     printf("NN searches left: %zu\n", n);
@@ -12,9 +13,12 @@ void print_progress(size_t n) {
 
 int main() {
     int i, j;
-    double ** d = (double **) malloc(num_data * sizeof(double *));
-    for (i = 0; i < num_data; i++)
-        d[i] = malloc(dim * 3 * sizeof(double));
+
+    sdm_set_log_level(logWARNING);
+
+    double ** d = (double **) malloc(NUM_BAGS * sizeof(double *));
+    for (i = 0; i < NUM_BAGS; i++)
+        d[i] = malloc(DIM * PTS_PER_BAG * sizeof(double));
 
     d[0][0] =  0.;   d[0][1] = 0.1 ;
     d[0][2] =  0.01; d[0][3] = 0.89;
@@ -46,8 +50,9 @@ int main() {
 
     const double ** data = (const double **) d;
 
-    size_t rows[num_data] = { 3, 3, 3, 3, 3, 3, 3 };
-    int labels[num_data] = { 0, 0, 1, 1, 2, 1, 0};
+    size_t rows[NUM_BAGS] = { 3, 3, 3, 3, 3, 3, 3 };
+    int labels[NUM_BAGS] = { 0, 0, 1, 1, 2, 1, 0};
+    double means[NUM_BAGS] = { 0.29, 0.305, 2.625, 2.589, 2.255, 2.325, 0.303};
 
     struct FLANNParameters flann_params = DEFAULT_FLANN_PARAMETERS;
     flann_params.algorithm = FLANN_INDEX_KDTREE_SINGLE;
@@ -64,39 +69,45 @@ int main() {
         1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18
     };
 
-    double acc = crossvalidate_bags_double(
-            data, num_data, rows, dim, labels, 
-            "renyi:.9", "gaussian", 
+    double acc = sdm_crossvalidate_classify_double(
+            data, NUM_BAGS, rows, DIM, labels,
+            "renyi:.9", "gaussian",
             &div_params, 2, 0, 1, 1,
-            cvals, 10, &default_svm_params,
-            2);
+            cvals, 10, &default_svm_params, 2);
     printf("CV acc: %g\n", acc);
 
     printf("\n\nTraining SDM\n");
-    SDMObjDouble *sdm = train_sdm_double(
-            data, num_data - 2, dim, rows, labels,
+    SDM_ClassifyD *sdm = SDM_ClassifyD_train(
+            data, NUM_BAGS - 2, DIM, rows, labels,
             "renyi:.9", "gaussian",
             &div_params, cvals, 10, &default_svm_params,
             2, NULL);
-    printf("Name: %s\n", SDMObjDouble_getName(sdm));
+    printf("Name: %s\n", SDM_ClassifyD_getName(sdm));
 
     printf("\n\nSingle predictions:\n");
-    for (i = 0; i < num_data; i++) {
-        printf("%d: %d\n", i, sdm_predict_double(sdm, data[i], rows[i]));
+    for (i = 0; i < NUM_BAGS; i++) {
+        printf("%d: %d\n", i, SDM_ClassifyD_predict(sdm, data[i], rows[i]));
     }
 
     printf("\n\nMass predictions, with decision values:\n");
-    int *pred_labels = (int *) malloc(num_data * sizeof(int));
+    int *pred_labels = (int *) malloc(NUM_BAGS * sizeof(int));
     double **dec_vals;
     size_t num_vals;
-    sdm_predict_many_vals_double(sdm, data, num_data, rows,
+    SDM_ClassifyD_predict_many_vals(sdm, data, NUM_BAGS, rows,
             pred_labels, &dec_vals, &num_vals);
-    for (i = 0; i < num_data; i++) {
+    for (i = 0; i < NUM_BAGS; i++) {
         printf("%d: %d   Vals: ", i, pred_labels[i]);
         for (j = 0; j < num_vals; j++)
             printf("%g ", dec_vals[i][j]);
         printf("\n");
     }
 
-    SDMObjDouble_freeModel(sdm);
+    SDM_ClassifyD_freeModel(sdm);
+
+    double rmse = sdm_crossvalidate_regress_double(
+            data, NUM_BAGS, rows, DIM, means,
+            "renyi:.9", "gaussian",
+            &div_params, 2, 0, 1, 1,
+            cvals, 10, &default_svm_params, 2);
+    printf("\n\nCV mean prediction RMSE: %g\n", rmse);
 }

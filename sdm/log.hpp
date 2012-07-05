@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include <boost/version.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #if BOOST_VERSION >= 103500
 #include <boost/thread.hpp>
 #endif
@@ -182,5 +183,13 @@ inline std::string NowTime()
 }
 
 #endif //WIN32
+
+
+// log the string argument to the appropriate log level
+// used for libsvm
+template <TLogLevel tl>
+void log_string(const char *s) {
+    FILE_LOG(tl) << boost::trim_copy(std::string(s));
+}
 
 #endif //__LOG_H__
