@@ -179,7 +179,7 @@ namespace detail {
                 }
             }
 
-            size_t do_job(size_t test_start, size_t test_end) const {
+            double do_job(size_t test_start, size_t test_end) const {
                 // testing is in [test_start, test_end)
                 size_t num_test = test_end - test_start;
                 size_t num_train = num_bags - num_test;
@@ -392,8 +392,12 @@ double crossvalidate(
 
     // copy the svm params so we can change them
     svm_parameter svm_p = svm_params;
-    svm_p.svm_type = C_SVC;
     svm_p.kernel_type = PRECOMPUTED;
+    // TODO: better handling of svm_type
+    if (boost::is_same<label_type, int>::value)
+        svm_p.svm_type = C_SVC;
+    else
+        svm_p.svm_type = EPSILON_SVR;
 
     // make libSVM log properly
     svm_set_print_string_function(&log_string<logDEBUG4>);

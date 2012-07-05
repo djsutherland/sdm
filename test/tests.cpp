@@ -159,6 +159,8 @@ class EasySmallSDMTest : public ::testing::Test {
     double train_raw[NUM_TRAIN][TRAIN_SIZE];
     Matrix train[NUM_TRAIN];
     std::vector<int> labels;
+    std::vector<double> means;
+    std::vector<double> stds;
 
     size_t num_test;
     double **test_raw;
@@ -176,7 +178,7 @@ class EasySmallSDMTest : public ::testing::Test {
         svm_params(default_svm_params)
     {
         double train_bleh[NUM_TRAIN][TRAIN_SIZE] = {
-            // 10 samples from N(0, 0)
+            // 10 samples from N(0, 1)
             { 0.5377, 1.8339,-2.2588, 0.8622, 0.3188,-1.3077,-0.4336, 0.3426, 3.5784, 2.7694},
             { 0.8884,-1.1471,-1.0689,-0.8095,-2.9443, 1.4384, 0.3252,-0.7549, 1.3703,-1.7115},
             {-0.1022,-0.2414, 0.3192, 0.3129,-0.8649,-0.0301,-0.1649, 0.6277, 1.0933, 1.1093},
@@ -197,11 +199,12 @@ class EasySmallSDMTest : public ::testing::Test {
         }
 
         labels.resize(NUM_TRAIN);
+        means.resize(NUM_TRAIN);
+        stds.resize(NUM_TRAIN);
         for (size_t i = 0; i < 5; i++) {
-            labels[i] = 0;
-            labels[i+5] = 1;
+            labels[i]   = 0; means[i]   = 0; stds[i]   = 1;
+            labels[i+5] = 1; means[i+5] = 2; stds[i+5] = .5;
         }
-
 
         test_labels.resize(NUM_TEST);
 
@@ -284,6 +287,21 @@ class EasySmallSDMTest : public ::testing::Test {
             tuning_folds);
     }
 
+    double testCVRegression(
+            const vector<double> &labs,
+            size_t folds,
+            const npdivs::DivFunc &div_func,
+            const KernelGroup &kernel_group,
+            size_t cv_threads = 0,
+            const vector<double> &cs = default_c_vals,
+            size_t tuning_folds = 3,
+            bool project_all = true,
+            bool shuffle = true)
+    {
+        return crossvalidate(train, num_train, labs, div_func, kernel_group,
+            div_params, folds, cv_threads, project_all, shuffle, cs, svm_params,
+            tuning_folds);
+    }
 };
 
 TEST_F(EasySmallSDMTest, BasicTrainingTesting) {
@@ -333,7 +351,7 @@ TEST_F(EasySmallSDMTest, CVPolySingleThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 1);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
 
 TEST_F(EasySmallSDMTest, CVRenyiSingleThreaded) {
@@ -346,7 +364,7 @@ TEST_F(EasySmallSDMTest, CVRenyiSingleThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 1);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
 
 TEST_F(EasySmallSDMTest, CVPolyTwoThreaded) {
@@ -358,7 +376,7 @@ TEST_F(EasySmallSDMTest, CVPolyTwoThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 2);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
 
 TEST_F(EasySmallSDMTest, CVRenyiTwoThreaded) {
@@ -370,7 +388,7 @@ TEST_F(EasySmallSDMTest, CVRenyiTwoThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 2);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
 
 TEST_F(EasySmallSDMTest, CVPolyDefaultThreaded) {
@@ -382,7 +400,7 @@ TEST_F(EasySmallSDMTest, CVPolyDefaultThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 0);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
 
 TEST_F(EasySmallSDMTest, CVRenyiDefaultThreaded) {
@@ -394,13 +412,62 @@ TEST_F(EasySmallSDMTest, CVRenyiDefaultThreaded) {
 
     double acc = testCV(5, div_func, kernel_group, 0);
     cout << "Accuracy: " << acc << endl;
-    EXPECT_GT(acc, .7);
+    EXPECT_GE(acc, .7);
 }
+
+
+TEST_F(EasySmallSDMTest, CVPolyMeans) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testCVRegression(means, 5, div_func, kernel_group, 0);
+    cout << "RMSE: " << rmse << endl;
+    EXPECT_LT(rmse, .8);
+}
+TEST_F(EasySmallSDMTest, CVRenyiMeans) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testCVRegression(means, 5, div_func, kernel_group, 0);
+    cout << "RMSE: " << rmse << endl;
+    EXPECT_LT(rmse, .8);
+}
+
+
+TEST_F(EasySmallSDMTest, CVPolyStds) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testCVRegression(stds, 5, div_func, kernel_group, 0);
+    cout << "RMSE: " << rmse << endl;
+    EXPECT_LT(rmse, .2);
+}
+TEST_F(EasySmallSDMTest, CVRenyiStds) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    double rmse = testCVRegression(stds, 5, div_func, kernel_group, 0);
+    cout << "RMSE: " << rmse << endl;
+    EXPECT_LT(rmse, .2);
+}
+
 
 } // end namespace
 
 int main(int argc, char **argv) {
-    FILELog::ReportingLevel() = logERROR;
+    FILELog::ReportingLevel() = logWARNING;
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
