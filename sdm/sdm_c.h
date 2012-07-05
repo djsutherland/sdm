@@ -121,7 +121,8 @@ void SDM_RegressD_freeModel (SDM_RegressD *sdm);
 void SDM_RegressF_freeModel (SDM_RegressF *sdm);
 
 // functions to train SDMs with
-#define TRAIN(classname, intype, labtype) classname * classname##_train(\
+#define TRAIN(classname, intype, labtype) \
+    classname * classname##_train(\
         const intype **train_bags,\
         size_t num_train,\
         size_t dim,\
@@ -142,7 +143,8 @@ TRAIN(SDM_RegressF, float,  double);
 
 // prediction functions
 // single item, label only
-#define PRED(classname, intype, labtype) labtype classname##_predict(\
+#define PRED(classname, intype, labtype) \
+    labtype classname##_predict(\
         const classname * sdm,\
         const intype * test_bag,\
         size_t rows)
@@ -154,7 +156,8 @@ PRED(SDM_RegressF, float,  double);
 
 // single item, with decision values
 // (allocating the storage for the values and changing vals to point to it)
-#define PRED_V(classname, intype, labtype) labtype classname##_predict_vals(\
+#define PRED_V(classname, intype, labtype) \
+    labtype classname##_predict_vals(\
         const classname * sdm,\
         const intype * test_bag,\
         size_t rows,\
@@ -167,7 +170,8 @@ PRED_V(SDM_RegressF, float,  double);
 #undef PRED_V
 
 // several items, labels only
-#define PRED_M(classname, intype, labtype) void classname##_predict_many(\
+#define PRED_M(classname, intype, labtype) \
+    void classname##_predict_many(\
         const classname * sdm,\
         const intype ** test_bags,\
         size_t num_test,\
@@ -180,7 +184,8 @@ PRED_M(SDM_RegressF, float,  double);
 #undef PRED_M
 
 // several items, with decision values
-#define PRED_MV(classname, intype, labtype) void classname##_predict_many_vals(\
+#define PRED_MV(classname, intype, labtype) \
+    void classname##_predict_many_vals(\
         const classname * sdm,\
         const intype ** test_bags,\
         size_t num_test,\
@@ -221,7 +226,7 @@ CV(regress,  float,  double);
 
 // cross-validate on precomputed divs
 #define CV_divs(name, labtype) \
-    double crossvalidate_##name##_divs(\
+    double sdm_crossvalidate_##name##_divs(\
         const double * divs,\
         size_t num_bags,\
         const labtype *labels,\
