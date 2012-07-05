@@ -573,7 +573,7 @@ TEST_F(EasySmallSDMTest, CVRenyiStds) {
 
 
 int main(int argc, char **argv) {
-    FILELog::ReportingLevel() = logDEBUG2;
+    FILELog::ReportingLevel() = logWARNING;
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
