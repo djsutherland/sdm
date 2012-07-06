@@ -95,6 +95,9 @@ FREE_MODEL(SDM_RegressF,  float,  double);
 
 const struct svm_parameter default_svm_params = sdm::default_svm_params;
 
+const double * default_c_vals = &sdm::default_c_vals[0];
+const size_t num_default_c_vals = sdm::default_c_vals.size();
+
 // copied from flann/flann.cpp
 flann::IndexParams create_parameters(const FLANNParameters* p)
 {
