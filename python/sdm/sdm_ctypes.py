@@ -156,7 +156,7 @@ class CustomStructure(Structure):
         Structure.__init__(self)
         self.__enums = {f: t for f, t in self._fields_ if issubclass_(t, Enum)}
 
-        for field, val in self._defaults_:
+        for field, val in self._defaults_.items():
             setattr(self, field, val)
 
     def __setattr__(self, k, v):
@@ -229,7 +229,7 @@ class FLANNParameters(CustomStructure):
         'multi_probe_level_': 2,
         'log_level' : FLANNLogLevel.WARNING,
         'random_seed' : -1
-  }
+    }
 
 
 ################################################################################
@@ -272,24 +272,24 @@ class SVMParams(CustomStructure):
         ('probability', c_int),
     ]
 
-    _defaults_ = [
-        ('svm_type', SVMType.C_SVC),
-        ('kernel_type', SVMKernelType.PRECOMPUTED),
-        ('degree', 0), ('gamma', 0), ('coef0', 0),
+    _defaults_ = {
+        'svm_type': SVMType.C_SVC,
+        'kernel_type': SVMKernelType.PRECOMPUTED,
+        'degree': 0, 'gamma': 0, 'coef0': 0,
 
-        ('cache_size', 1024),
-        ('eps', 1e-3),
-        ('C', 1),
+        'cache_size': 1024,
+        'eps': 1e-3,
+        'C': 1,
 
-        ('nr_weight', 0),
-        ('weight_label', None),
-        ('weight', None),
+        'nr_weight': 0,
+        'weight_label': None,
+        'weight': None,
 
-        ('nu', 0),
-        ('p', 0.1),
-        ('shrinking', 1),
-        ('probability', 0),
-    ]
+        'nu': 0,
+        'p': 0.1,
+        'shrinking': 1,
+        'probability': 0,
+    }
 
 
 ################################################################################
@@ -318,12 +318,12 @@ class DivParams(CustomStructure):
         ('print_progress', CFUNCTYPE(None, c_size_t)),
     ]
 
-    _defaults_ = [
-        ('k', 3),
-        ('num_threads', 0),
-        ('show_progress', 0),
-        ('print_progress', None),
-    ]
+    _defaults_ = {
+        'k': 3,
+        'num_threads': 0,
+        'show_progress': 0,
+        'print_progress': None,
+    }
 
 ################################################################################
 ### SDM model stuff
