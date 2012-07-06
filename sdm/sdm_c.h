@@ -104,6 +104,8 @@ typedef struct DivParamsC_s {
     void (*print_progress)(size_t);
 } DivParamsC;
 
+void print_progress_to_stderr(size_t num_left);
+
 // C structs so we can return an SDM object from these methods
 // declared to have a single SDM<double> or SDM<float> member
 typedef struct SDM_ClassifyD_s SDM_ClassifyD;

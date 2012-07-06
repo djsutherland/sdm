@@ -62,6 +62,10 @@ enum TLogLevel sdm_get_log_level() {
 }
 
 
+void print_progress_to_stderr(size_t num_left) {
+    npdivs::print_progress_cerr(num_left);
+}
+
 struct SDM_ClassifyD_s { SDM<double, int> *sdm; };
 struct SDM_ClassifyF_s { SDM<float,  int> *sdm; };
 struct SDM_RegressD_s  { SDM<double, double> *sdm; };

@@ -7,10 +7,6 @@
 #define PTS_PER_BAG 3
 #define DIM 2
 
-void print_progress(size_t n) {
-    printf("NN searches left: %zu\n", n);
-}
-
 int main() {
     int i, j;
 
@@ -101,10 +97,14 @@ int main() {
 
     SDM_ClassifyD_freeModel(sdm);
 
+    div_params.show_progress = 5;
+    div_params.print_progress = print_progress_to_stderr;
+
+    printf("\n\nAbout to do regression, showing some progress output:\n");
     double rmse = sdm_crossvalidate_regress_double(
             data, NUM_BAGS, rows, DIM, means,
             "renyi:.9", "gaussian",
             &div_params, 2, 0, 1, 1,
             default_c_vals, num_default_c_vals, &default_svm_params, 2);
-    printf("\n\nCV mean prediction RMSE: %g\n", rmse);
+    printf("CV mean prediction RMSE: %g\n", rmse);
 }
