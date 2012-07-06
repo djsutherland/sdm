@@ -79,6 +79,8 @@ const int PRECOMPUTED = 4; // only kernel type we use
 
 const extern struct svm_parameter default_svm_params;
 
+const extern double * default_c_vals;
+const extern size_t num_default_c_vals;
 
 ////////////////////////////////////////////////////////////////////////////////
 

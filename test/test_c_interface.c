@@ -65,22 +65,19 @@ int main() {
         NULL
     };
 
-    const double cvals[10] = { // 2^-9, 2^-6, ..., 2^18
-        1./512., 1./64., 1./8., 1, 1<<3, 1<<6, 1<<9, 1<<12, 1<<15, 1<<18
-    };
-
     double acc = sdm_crossvalidate_classify_double(
             data, NUM_BAGS, rows, DIM, labels,
             "renyi:.9", "gaussian",
             &div_params, 2, 0, 1, 1,
-            cvals, 10, &default_svm_params, 2);
+            default_c_vals, num_default_c_vals, &default_svm_params, 2);
     printf("CV acc: %g\n", acc);
 
     printf("\n\nTraining SDM\n");
     SDM_ClassifyD *sdm = SDM_ClassifyD_train(
             data, NUM_BAGS - 2, DIM, rows, labels,
             "renyi:.9", "gaussian",
-            &div_params, cvals, 10, &default_svm_params,
+            &div_params, default_c_vals, num_default_c_vals,
+            &default_svm_params,
             2, NULL);
     printf("Name: %s\n", SDM_ClassifyD_getName(sdm));
 
@@ -108,6 +105,6 @@ int main() {
             data, NUM_BAGS, rows, DIM, means,
             "renyi:.9", "gaussian",
             &div_params, 2, 0, 1, 1,
-            cvals, 10, &default_svm_params, 2);
+            default_c_vals, num_default_c_vals, &default_svm_params, 2);
     printf("\n\nCV mean prediction RMSE: %g\n", rmse);
 }
