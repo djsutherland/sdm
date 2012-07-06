@@ -103,25 +103,21 @@ class Enum(c_uint, metaclass=EnumMeta):
             value = value.value
         else:
             try:
-                value_up = value.upper()
-                self._name, value = value_up, self._members[value_up].value
+                value = self._members[value.upper()].value
             except KeyError:
                 raise ValueError("invalid %s value %r" %
                         (self.__class__.__name__, value))
-            except (AttributeError, TypeError):
-                self.name # sets the name
+            except AttributeError:
+                pass # not a string
 
         super().__init__(value)
 
     @property
     def name(self):
-        if not hasattr(self, '_name'):
-            try:
-                self._name = self._rev_members[self.value]
-            except KeyError:
-                raise ValueError("Bad %r value %r" %
-                                 (self.__class__, self.value))
-        return self._name
+        try:
+            return self._rev_members[self.value]
+        except KeyError:
+            raise ValueError("Bad %r value %r" % (self.__class__, self.value))
 
     @classmethod
     def from_param(cls, param):
@@ -162,6 +158,10 @@ class CustomStructure(Structure):
     def __setattr__(self, k, v):
         class_wrapper = self.__enums.get(k, lambda x: x)
         super().__setattr__(k, class_wrapper(v))
+
+    def update(self, **vals):
+        for k, v in vals.items():
+            setattr(self, k, v)
 
 
 ################################################################################
@@ -255,8 +255,8 @@ class SVMParams(CustomStructure):
         ('svm_type', SVMType),
         ('kernel_type', SVMKernelType),
         ('degree', c_int),
-        ('gamma', c_int),
-        ('coef0', c_int),
+        ('gamma', c_double),
+        ('coef0', c_double),
 
         ('cache_size', c_double), # in MB
         ('eps', c_double),
@@ -306,8 +306,16 @@ get_log_level = _LIB.sdm_get_log_level
 get_log_level.restype = returns_enum(LogLevel)
 get_log_level.argtypes = []
 
+set_log_level('warning') # defaults to debug2 for some reason
+
 ################################################################################
 ### Div parameters
+
+print_progress_to_stderr = _LIB.print_progress_to_stderr
+print_progress_to_stderr.restype = None
+print_progress_to_stderr.argtypes = [c_size_t]
+
+print_progress_type = POINTER(CFUNCTYPE(None, c_size_t))
 
 class DivParams(CustomStructure):
     _fields_ = [
@@ -315,15 +323,21 @@ class DivParams(CustomStructure):
         ('flann_params', FLANNParameters),
         ('num_threads', c_size_t),
         ('show_progress', c_size_t),
-        ('print_progress', CFUNCTYPE(None, c_size_t)),
+        ('print_progress', print_progress_type),
     ]
 
     _defaults_ = {
         'k': 3,
         'num_threads': 0,
         'show_progress': 0,
-        'print_progress': None,
+        'print_progress': print_progress_type(print_progress_to_stderr),
     }
+
+################################################################################
+### C values
+
+default_c_vals = POINTER(c_double).in_dll(_LIB, 'default_c_vals')
+num_default_c_vals = c_size_t.in_dll(_LIB, 'num_default_c_vals')
 
 ################################################################################
 ### SDM model stuff
@@ -446,7 +460,8 @@ for name, in_name, intype, labtype in _cv_kinds:
             POINTER(c_size_t),
             c_size_t,
             POINTER(labtype),
-            c_char_p, c_char_p,
+            c_char_p,
+            c_char_p,
             POINTER(DivParams),
             c_size_t,
             c_size_t,
