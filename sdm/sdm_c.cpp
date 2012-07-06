@@ -35,10 +35,12 @@
  ******************************************************************************/
 #include "sdm/sdm.hpp"
 #include "sdm/kernels/from_str.hpp"
+#include "sdm/log.hpp"
 #include "sdm/sdm_c.h"
 
 #include <algorithm>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -55,10 +57,19 @@ using flann::Matrix;
 ////////////////////////////////////////////////////////////////////////////////
 
 void sdm_set_log_level(enum TLogLevel level) {
-    FILELog::ReportingLevel() = level;
+    try {
+        FILELog::ReportingLevel() = level;
+    } catch (std::exception &e) {
+        FILE_LOG(logERROR) << e.what();
+    }
 }
 enum TLogLevel sdm_get_log_level() {
-    return FILELog::ReportingLevel();
+    try {
+        return FILELog::ReportingLevel();
+    } catch (std::exception &e) {
+        FILE_LOG(logERROR) << e.what();
+        return logERROR;
+    }
 }
 
 
@@ -73,7 +84,12 @@ struct SDM_RegressF_s  { SDM<float,  double> *sdm; };
 
 #define GET_NAME(classname) \
 const char * classname##_getName(classname *sdm) { \
-    return sdm->sdm->name().c_str(); \
+    try { \
+        return sdm->sdm->name().c_str(); \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        return NULL; \
+    } \
 }
 GET_NAME(SDM_ClassifyD);
 GET_NAME(SDM_ClassifyF);
@@ -84,10 +100,14 @@ GET_NAME(SDM_RegressF);
 
 #define FREE_MODEL(classname, intype, labtype) \
 void classname##_freeModel(classname * sdm) { \
-    SDM<intype, labtype> * m = sdm->sdm; \
-    m->destroyModelAndProb(); \
-    m->destroyTrainBagMatrices(); \
-    delete m; \
+    try { \
+        SDM<intype, labtype> * m = sdm->sdm; \
+        m->destroyModelAndProb(); \
+        m->destroyTrainBagMatrices(); \
+        delete m; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+    } \
 }
 FREE_MODEL(SDM_ClassifyD, double, int);
 FREE_MODEL(SDM_ClassifyF, float,  int);
@@ -237,13 +257,18 @@ SDM<Scalar, label_type> *train_sdm_(
         size_t tuning_folds,\
         double * divs) \
 { \
-    SDM<intype, labtype> *sdm = train_sdm_( \
-            train_bags, num_train, dim, rows, labels, \
-            div_func_spec, kernel_spec, div_params, c_vals, num_c_vals, \
-            svm_params, tuning_folds, divs); \
-    classname *ret = (classname *) malloc(sizeof(classname *)); \
-    ret->sdm = sdm; \
-    return ret; \
+    try { \
+        SDM<intype, labtype> *sdm = train_sdm_( \
+                train_bags, num_train, dim, rows, labels, \
+                div_func_spec, kernel_spec, div_params, c_vals, num_c_vals, \
+                svm_params, tuning_folds, divs); \
+        classname *ret = (classname *) malloc(sizeof(classname *)); \
+        ret->sdm = sdm; \
+        return ret; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        return NULL; \
+    } \
 }
 TRAIN(SDM_ClassifyD, double, int);
 TRAIN(SDM_ClassifyF, float,  int);
@@ -256,13 +281,18 @@ TRAIN(SDM_RegressF,  float,  double);
 
 // single item, label only
 #define PRED(classname, intype, labtype) \
-    labtype classname##_predict(\
-        const classname * sdm,\
-        const intype * test_bag,\
-        size_t rows) {\
-    labtype ret; \
-    classname##_predict_many(sdm, &test_bag, 1, &rows, &ret); \
-    return ret; \
+    labtype classname##_predict( \
+        const classname * sdm, \
+        const intype * test_bag, \
+        size_t rows) { \
+    try { \
+        labtype ret; \
+        classname##_predict_many(sdm, &test_bag, 1, &rows, &ret); \
+        return ret; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        return -0xdead; \
+    } \
 }
 PRED(SDM_ClassifyD, double, int);
 PRED(SDM_ClassifyF, float,  int);
@@ -274,16 +304,23 @@ PRED(SDM_RegressF, float,  double);
 // single item, with decision values
 // (allocating the storage for the values and changing vals to point to it)
 #define PRED_V(classname, intype, labtype) \
-    labtype classname##_predict_vals(\
-        const classname * sdm,\
+    labtype classname##_predict_vals( \
+        const classname * sdm, \
         const intype * test_bag,\
         size_t rows,\
         double ** vals,\
         size_t * num_vals) { \
-    labtype ret; \
-    classname##_predict_many_vals( \
-            sdm, &test_bag, 1, &rows, &ret, &vals, num_vals); \
-    return ret; \
+    try { \
+        labtype ret; \
+        classname##_predict_many_vals( \
+                sdm, &test_bag, 1, &rows, &ret, &vals, num_vals); \
+        return ret; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        vals[0] = NULL; \
+        *num_vals = 0; \
+        return -0xdead; \
+    } \
 }
 PRED_V(SDM_ClassifyD, double, int);
 PRED_V(SDM_ClassifyF, float,  int);
@@ -294,20 +331,26 @@ PRED_V(SDM_RegressF, float,  double);
 
 // several items, labels only
 #define PRED_M(classname, intype, labtype) \
-    void classname##_predict_many(\
-        const classname * sdm,\
-        const intype ** test_bags,\
-        size_t num_test,\
-        const size_t * rows,\
+    void classname##_predict_many( \
+        const classname * sdm, \
+        const intype ** test_bags, \
+        size_t num_test, \
+        const size_t * rows, \
         labtype * labels) { \
-    Matrix<intype> *test_bags_m = make_matrices( \
-            const_cast<intype **>(test_bags), num_test, rows, \
-            sdm->sdm->getDim()); \
-    \
-    vector<labtype> labels_v = sdm->sdm->predict(test_bags_m, num_test); \
-    \
-    delete[] test_bags_m; \
-    std::copy(labels_v.begin(), labels_v.end(), labels); \
+    try { \
+        Matrix<intype> *test_bags_m = make_matrices( \
+                const_cast<intype **>(test_bags), num_test, rows, \
+                sdm->sdm->getDim()); \
+        \
+        vector<labtype> labels_v = sdm->sdm->predict(test_bags_m, num_test); \
+        \
+        delete[] test_bags_m; \
+        std::copy(labels_v.begin(), labels_v.end(), labels); \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        for (size_t i = 0; i < num_test; i++) \
+            labels[i] = -0xdead; \
+    } \
 }
 PRED_M(SDM_ClassifyD, double, int);
 PRED_M(SDM_ClassifyF, float,  int);
@@ -326,25 +369,33 @@ PRED_M(SDM_RegressF, float,  double);
         labtype * labels,\
         double *** vals,\
         size_t * num_vals) { \
-    Matrix<intype> *test_bags_m = make_matrices( \
-            const_cast<intype **>(test_bags), num_test, rows, \
-            sdm->sdm->getDim()); \
-    \
-    vector< vector<double> > vals_v; \
-    \
-    vector<labtype> labels_v = \
-        sdm->sdm->predict(test_bags_m, num_test, vals_v); \
-    \
-    delete[] test_bags_m; \
-    std::copy(labels_v.begin(), labels_v.end(), labels); \
-    \
-    vals[0] = (double **) std::malloc(num_test * sizeof(double *)); \
-    size_t real_num_vals = vals_v[0].size(); \
-    *num_vals = real_num_vals; \
-    \
-    for (size_t i = 0; i < num_test; i++) { \
-        vals[0][i] = (double *) std::malloc(real_num_vals * sizeof(double)); \
-        std::copy(vals_v[i].begin(), vals_v[i].end(), vals[0][i]); \
+    try { \
+        Matrix<intype> *test_bags_m = make_matrices( \
+                const_cast<intype **>(test_bags), num_test, rows, \
+                sdm->sdm->getDim()); \
+        \
+        vector< vector<double> > vals_v; \
+        \
+        vector<labtype> labels_v = \
+            sdm->sdm->predict(test_bags_m, num_test, vals_v); \
+        \
+        delete[] test_bags_m; \
+        std::copy(labels_v.begin(), labels_v.end(), labels); \
+        \
+        vals[0] = (double **) std::malloc(num_test * sizeof(double *)); \
+        size_t real_num_vals = vals_v[0].size(); \
+        *num_vals = real_num_vals; \
+        \
+        for (size_t i = 0; i < num_test; i++) { \
+            vals[0][i] = (double*) std::malloc(real_num_vals * sizeof(double));\
+            std::copy(vals_v[i].begin(), vals_v[i].end(), vals[0][i]); \
+        } \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        for (size_t i = 0; i < num_test; i++) \
+            labels[i] = -0xdead; \
+        vals[0] = NULL; \
+        *num_vals = 0; \
     } \
 }
 PRED_MV(SDM_ClassifyD, double, int);
@@ -378,28 +429,33 @@ PRED_MV(SDM_RegressF, float,  double);
         const struct svm_parameter * svm_params,\
         size_t tuning_folds) \
 { \
-    Matrix<intype> *bags_m = make_matrices( \
-            const_cast<intype **>(bags), num_bags, rows, dim); \
-    \
-    npdivs::DivFunc *df = div_func_from_str(string(div_func_spec)); \
-    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
-    \
-    double acc = crossvalidate( \
-            bags_m, num_bags, \
-            vector<labtype>(labels, labels + num_bags), \
-            *df, *kernel, \
-            make_div_params(div_params), \
-            folds, num_cv_threads, \
-            (bool) project_all_data, (bool) shuffle_order, \
-            vector<double>(c_vals, c_vals + num_c_vals), \
-            *svm_params, \
-            tuning_folds); \
-    \
-    delete kernel; \
-    delete df; \
-    delete[] bags_m; \
-    \
-    return acc; \
+    try { \
+        Matrix<intype> *bags_m = make_matrices( \
+                const_cast<intype **>(bags), num_bags, rows, dim); \
+        \
+        npdivs::DivFunc *df = div_func_from_str(string(div_func_spec)); \
+        KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
+        \
+        double acc = crossvalidate( \
+                bags_m, num_bags, \
+                vector<labtype>(labels, labels + num_bags), \
+                *df, *kernel, \
+                make_div_params(div_params), \
+                folds, num_cv_threads, \
+                (bool) project_all_data, (bool) shuffle_order, \
+                vector<double>(c_vals, c_vals + num_c_vals), \
+                *svm_params, \
+                tuning_folds); \
+        \
+        delete kernel; \
+        delete df; \
+        delete[] bags_m; \
+        \
+        return acc; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        return -1; \
+    } \
 }
 CV(classify, double, int);
 CV(classify, float,  int);
@@ -423,20 +479,25 @@ CV(regress,  float,  double);
         const struct svm_parameter *svm_params,\
         size_t tuning_folds) \
 { \
-    KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
-    \
-    double acc = crossvalidate<labtype>( \
-            divs, num_bags, \
-            vector<labtype>(labels, labels + num_bags), \
-            *kernel, \
-            folds, num_cv_threads, \
-            (bool) project_all_data, (bool) shuffle_order, \
-            vector<double>(c_vals, c_vals + num_c_vals), \
-            *svm_params, \
-            tuning_folds); \
-    \
-    delete kernel; \
-    return acc; \
+    try { \
+        KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
+        \
+        double acc = crossvalidate<labtype>( \
+                divs, num_bags, \
+                vector<labtype>(labels, labels + num_bags), \
+                *kernel, \
+                folds, num_cv_threads, \
+                (bool) project_all_data, (bool) shuffle_order, \
+                vector<double>(c_vals, c_vals + num_c_vals), \
+                *svm_params, \
+                tuning_folds); \
+        \
+        delete kernel; \
+        return acc; \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        return -1; \
+    } \
 }
 CV_divs(classify, int);
 CV_divs(regress,  double);
