@@ -2,6 +2,10 @@
 # Copyright (c) 2012, Dougal J. Sutherland (dsutherl@cs.cmu.edu).              #
 # All rights reserved.                                                         #
 #                                                                              #
+# Portions included from FLANN:                                                #
+# Copyright 2008-2009  Marius Muja (mariusm@cs.ubc.ca). All rights reserved.   #
+# Copyright 2008-2009  David G. Lowe (lowe@cs.ubc.ca). All rights reserved.    #
+#                                                                              #
 # Redistribution and use in source and binary forms, with or without           #
 # modification, are permitted provided that the following conditions are met:  #
 #                                                                              #
@@ -12,9 +16,10 @@
 #       notice, this list of conditions and the following disclaimer in the    #
 #       documentation and/or other materials provided with the distribution.   #
 #                                                                              #
-#     * Neither the name of Carnegie Mellon University nor the names of the    #
-#       contributors may be used to endorse or promote products derived from   #
-#       this software without specific prior written permission.               #
+#     * Neither the name of Carnegie Mellon University, the University of      #
+#       British Columbia, nor the names of the contributors may be used to     #
+#       endorse or promote products derived from this software without         #
+#       specific prior written permission.                                     #
 #                                                                              #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"  #
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE    #
@@ -33,6 +38,10 @@
 # things to change:
 #     - metaclass syntax for Enum
 #     - .values(), .items()
+#     - dictionary comprehension
+#     - super()
+
+# TODO: use ndpointer to verify things are contiguous, aligned, right dims...
 
 from ctypes import (cdll, Structure, POINTER, CFUNCTYPE,
         c_short, c_int, c_uint, c_long, c_ulong, c_float, c_double, c_char_p)
@@ -40,29 +49,46 @@ from ctypes.util import find_library
 
 from itertools import product
 
+from numpy import issubclass_
+
 c_size_t = c_ulong
 _LIB = cdll[find_library('sdm')]
 
 ################################################################################
 
+# Enumeration class
 # based on http://code.activestate.com/recipes/576415-ctype-enumeration-class/
 
 class EnumMeta(type(c_uint)):
     def __new__(cls, name, bases, classdict):
+        # figure out which members of the class are enum items
         _members = {}
+        _rev_members = {}
         for k, v in classdict.items():
             if not k.startswith('_'):
                 try:
-                    v = c_uint(v)
+                    c_uint(v)
                 except TypeError:
                     pass
                 else:
                     if not k == k.upper():
                         raise ValueError("Enum values must be all-uppercase")
-                    classdict[k] = v
-                    _members[k] = v
+
+                    classdict[k] = _members[k] = v
+                    _rev_members[v] = k
+
+        # construct the class
         classdict['_members'] = _members
-        return type(c_uint).__new__(cls, name, bases, classdict)
+        classdict['_rev_members'] = _rev_members
+        the_type = type(c_uint).__new__(cls, name, bases, classdict)
+
+        # now that the class is finalized, switch members to be of the class
+        for k, v in _members.items():
+            as_class = the_type(v)
+            the_type._members[k] = as_class
+            setattr(the_type, k, as_class)
+
+        return the_type
 
     def __contains__(self, value):
         return value in self._members.values()
@@ -70,18 +96,32 @@ class EnumMeta(type(c_uint)):
     def __repr__(self):
         return "<Enumeration %s>" % self.__name__
 
+
 class Enum(c_uint, metaclass=EnumMeta):
     def __init__(self, value):
-        try:
-            value = value.upper()
-            self.name, value = value, self._members[value].value
-        except (AttributeError, TypeError, KeyError):
+        if isinstance(value, self.__class__):
+            value = value.value
+        else:
             try:
-                self.name = next(k for k, v in self._members.items()
-                                 if value == v.value)
-            except StopIteration:
-                raise ValueError("Bad %r value %r" % (self.__class__, value))
+                value_up = value.upper()
+                self._name, value = value_up, self._members[value_up].value
+            except KeyError:
+                raise ValueError("invalid %s value %r" %
+                        (self.__class__.__name__, value))
+            except (AttributeError, TypeError):
+                self.name # sets the name
+
         super().__init__(value)
+
+    @property
+    def name(self):
+        if not hasattr(self, '_name'):
+            try:
+                self._name = self._rev_members[self.value]
+            except KeyError:
+                raise ValueError("Bad %r value %r" %
+                                 (self.__class__, self.value))
+        return self._name
 
     @classmethod
     def from_param(cls, param):
@@ -96,20 +136,124 @@ class Enum(c_uint, metaclass=EnumMeta):
     def __repr__(self):
         return "<member %s=%d of %r>" % (self.name, self.value, self.__class__)
 
+
 # XXX: here because otherwise __init__ doesn't seem to get called
 def returns_enum(enum_subclass):
     def inner(value):
         return enum_subclass(value)
     return inner
 
+################################################################################
+### Custom structure class, with defaults and nicer enumeration support
+
+# extremely loosely based on code from pyflann.flann_ctypes
+
+class CustomStructure(Structure):
+    _defaults_ = {}
+    __enums = {}
+
+    def __init__(self):
+        Structure.__init__(self)
+        self.__enums = {f: t for f, t in self._fields_ if issubclass_(t, Enum)}
+
+        for field, val in self._defaults_:
+            setattr(self, field, val)
+
+    def __setattr__(self, k, v):
+        class_wrapper = self.__enums.get(k, lambda x: x)
+        super().__setattr__(k, class_wrapper(v))
+
 
 ################################################################################
-### LibSVM stuff
+### FLANN parameters
 
-class SVMParams(Structure):
+class FLANNAlgorithm(Enum):
+    LINEAR = 0
+    KDTREE = 1
+    KMEANS = 2
+    COMPOSITE = 3
+    KDTREE_SIMPLE = 4
+    SAVED = 254
+    AUTOTUNED = 255
+
+class FLANNCentersInit(Enum):
+    RANDOM = 0
+    GONZALES = 1
+    KMEANSPP = 2
+
+class FLANNLogLevel(Enum):
+    NONE = 0
+    FATAL = 1
+    ERROR = 2
+    WARNING = 3
+    INFO = 4
+
+
+class FLANNParameters(CustomStructure):
     _fields_ = [
-        ('svm_type', c_int),
-        ('kernel_type', c_int),
+        ('algorithm', FLANNAlgorithm),
+        ('checks', c_int),
+        ('cb_index', c_float),
+        ('eps', c_float),
+        ('trees', c_int),
+        ('leaf_max_size', c_int),
+        ('branching', c_int),
+        ('iterations', c_int),
+        ('centers_init', FLANNCentersInit),
+        ('target_precision', c_float),
+        ('build_weight', c_float),
+        ('memory_weight', c_float),
+        ('sample_fraction', c_float),
+        ('table_number_', c_uint),
+        ('key_size_', c_uint),
+        ('multi_probe_level_', c_uint),
+        ('log_level', FLANNLogLevel),
+        ('random_seed', c_long),
+    ]
+    _defaults_ = {
+        'algorithm' : FLANNAlgorithm.KDTREE,
+        'checks' : 32,
+        'eps' : 0.0,
+        'cb_index' : 0.5,
+        'trees' : 1,
+        'leaf_max_size' : 4,
+        'branching' : 32,
+        'iterations' : 5,
+        'centers_init' : FLANNCentersInit.RANDOM,
+        'target_precision' : 0.9,
+        'build_weight' : 0.01,
+        'memory_weight' : 0.0,
+        'sample_fraction' : 0.1,
+        'table_number_': 12,
+        'key_size_': 20,
+        'multi_probe_level_': 2,
+        'log_level' : FLANNLogLevel.WARNING,
+        'random_seed' : -1
+  }
+
+
+################################################################################
+### LibSVM parameters
+
+class SVMType(Enum):
+    C_SVC = 0
+    NU_SVC = 1
+    ONE_CLASS = 2
+    EPSILON_SVR = 3
+    NU_SVR = 4
+
+class SVMKernelType(Enum):
+    LINEAR = 0
+    POLY = 1
+    RBF = 2
+    SIGMOID = 3
+    PRECOMPUTED = 4
+
+
+class SVMParams(CustomStructure):
+    _fields_ = [
+        ('svm_type', SVMType),
+        ('kernel_type', SVMKernelType),
         ('degree', c_int),
         ('gamma', c_int),
         ('coef0', c_int),
@@ -117,29 +261,36 @@ class SVMParams(Structure):
         ('cache_size', c_double), # in MB
         ('eps', c_double),
         ('C', c_double),
+
         ('nr_weight', c_int),
         ('weight_label', POINTER(c_int)),
         ('weight', POINTER(c_double)),
+
         ('nu', c_double),
         ('p', c_double),
         ('shrinking', c_int),
         ('probability', c_int),
     ]
 
+    _defaults_ = [
+        ('svm_type', SVMType.C_SVC),
+        ('kernel_type', SVMKernelType.PRECOMPUTED),
+        ('degree', 0), ('gamma', 0), ('coef0', 0),
 
-class SVMTypes(Enum):
-    C_SVC = 0
-    NU_SVC = 1
-    ONE_CLASS = 2
-    EPSILON_SVR = 3
-    NU_SVR = 4
+        ('cache_size', 1024),
+        ('eps', 1e-3),
+        ('C', 1),
 
-class SVMKernelTypes(Enum):
-    LINEAR = 0
-    POLY = 1
-    RBF = 2
-    SIGMOID = 3
-    PRECOMPUTED = 4
+        ('nr_weight', 0),
+        ('weight_label', None),
+        ('weight', None),
+
+        ('nu', 0),
+        ('p', 0.1),
+        ('shrinking', 1),
+        ('probability', 0),
+    ]
+
 
 ################################################################################
 ### Logging stuff
@@ -156,37 +307,22 @@ get_log_level.restype = returns_enum(LogLevel)
 get_log_level.argtypes = []
 
 ################################################################################
-### Parameter structures
+### Div parameters
 
-class FLANNParameters(Structure):
-    _fields_ = [
-        ('algorithm', c_int),
-        ('checks', c_int),
-        ('cb_index', c_float),
-        ('eps', c_float),
-        ('trees', c_int),
-        ('leaf_max_size', c_int),
-        ('branching', c_int),
-        ('iterations', c_int),
-        ('centers_init', c_int),
-        ('target_precision', c_float),
-        ('build_weight', c_float),
-        ('memory_weight', c_float),
-        ('sample_fraction', c_float),
-        ('table_number_', c_uint),
-        ('key_size_', c_uint),
-        ('multi_probe_level_', c_uint),
-        ('log_level', c_int),
-        ('random_seed', c_long),
-    ]
-
-class DivParams(Structure):
+class DivParams(CustomStructure):
     _fields_ = [
         ('k', c_int),
         ('flann_params', FLANNParameters),
         ('num_threads', c_size_t),
         ('show_progress', c_size_t),
         ('print_progress', CFUNCTYPE(None, c_size_t)),
+    ]
+
+    _defaults_ = [
+        ('k', 3),
+        ('num_threads', 0),
+        ('show_progress', 0),
+        ('print_progress', None),
     ]
 
 ################################################################################
