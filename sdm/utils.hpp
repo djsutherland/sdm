@@ -33,12 +33,18 @@
 #include "sdm/basics.hpp"
 
 #include <algorithm>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
 #include <boost/throw_exception.hpp>
 
+#include <flann/util/matrix.h>
+
 namespace sdm {
+namespace detail {
 
 /* Finds the median of a vector with numeric type, reordering the vector
  * in doing so. Throws std::domain_error if the vector is empty.
@@ -62,5 +68,26 @@ double median(std::vector<T> &vec) {
     }
 }
 
+// return a string representation of a matrix
+template <typename T>
+std::string matrixToString(const T* mat, size_t rows, size_t cols) {
+    std::stringstream ss (std::stringstream::in | std::stringstream::out);
+
+    ss << std::setprecision(8);
+    for (size_t i = 0; i < rows; i++) {
+        for (size_t j = 0; j < cols; j++)
+            ss << "\t" << mat[i*cols + j];
+        ss << "\n";
+    }
+    return ss.str();
 }
+
+// string representation of a flann::Matrix
+template <typename T>
+std::string matrixToString(const flann::Matrix<T> &mat) {
+    return matrixToString(mat.ptr(), mat.rows, mat.cols);
+}
+
+} // detail
+} // sdm
 #endif

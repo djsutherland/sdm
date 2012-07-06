@@ -38,6 +38,8 @@
 #include <boost/throw_exception.hpp>
 
 #include "sdm/kernel_projection.hpp"
+#include "sdm/log.hpp"
+#include "sdm/utils.hpp"
 
 using boost::format;
 
@@ -171,6 +173,9 @@ void project_to_symmetric_psd(double* matrix, size_t n) {
     symmetrize(matrix, n);
 
     try {
+        FILE_LOG(logDEBUG4) << "about to get eigenvalues of this matrix:\n" <<
+            detail::matrixToString(matrix, n, n);
+
         eig(matrix, n, eigvals, eigvecs);
 
         // are any of our eigenvalues actually negative?

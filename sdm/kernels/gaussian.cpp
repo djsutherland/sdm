@@ -74,7 +74,7 @@ const boost::ptr_vector<Kernel>* GaussianKernelGroup::getTuningVector(
                     pos_divs.push_back(d);
             }
         }
-        scale = median(pos_divs);
+        scale = detail::median(pos_divs);
     } else {
         scale = 1.0;
     }

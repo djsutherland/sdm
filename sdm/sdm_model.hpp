@@ -31,11 +31,12 @@
 #ifndef SDM_MODEL_HPP_
 #define SDM_MODEL_HPP_
 #include "sdm/basics.hpp"
+#include "sdm/defaults.hpp"
 #include "sdm/kernels/kernel.hpp"
 #include "sdm/kernel_projection.hpp"
 #include "sdm/log.hpp"
-#include "sdm/defaults.hpp"
 #include "sdm/tune_params.hpp"
+#include "sdm/utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -198,25 +199,6 @@ SDM<Scalar, label_type> * train_sdm(
 // Helper functions
 
 namespace detail {
-    // return a string representation of a matrix
-    template <typename T>
-    std::string matrixToString(const T* mat, size_t rows, size_t cols) {
-        std::stringstream ss (std::stringstream::in | std::stringstream::out);
-
-        ss << std::setprecision(8);
-        for (size_t i = 0; i < rows; i++) {
-            for (size_t j = 0; j < cols; j++)
-                ss << "\t" << mat[i*cols + j];
-            ss << "\n";
-        }
-        return ss.str();
-    }
-
-    // string representation of a flann::Matrix
-    template <typename T>
-    std::string matrixToString(const flann::Matrix<T> &mat) {
-        return matrixToString(mat.ptr(), mat.rows, mat.cols);
-    }
 
     // string representation of an SVM model
     std::string SVMtoString(const svm_model &model);
