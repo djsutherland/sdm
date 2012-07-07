@@ -31,7 +31,7 @@
 
 from __future__ import absolute_import
 
-from ctypes import POINTER, c_int, c_float, c_double, sizeof
+from ctypes import POINTER, pointer, c_int, c_float, c_double, sizeof
 import numbers
 
 import numpy as np
@@ -107,36 +107,52 @@ def _check_c_vals(c_vals):
         return None, lib.default_c_vals, lib.num_default_c_vals
 
 
-def _make_svm_params(labtype, p=None, cache_size=None, eps=None,
-                     shrinking=None, probability=None):
+def _make_svm_params(labtype, regression_eps=None,
+                     svm_cache_size=None, svm_eps=None,
+                     svm_shrinking=None, probability=None, **junk):
     svm_params = lib.SVMParams()
     if labtype == np.double:
         svm_params.svm_type = lib.SVMType.EPSILON_SVR
 
-    if p is not None:
-        svm_params.p = p
-    if cache_size is not None:
-        svm_params.cache_size = cache_size
-    if eps is not None:
-        svm_params.eps = eps
-    if shrinking is not None:
-        svm_params.shrinking = shrinking
+    if regression_eps is not None:
+        svm_params.p = regression_eps
+    if svm_cache_size is not None:
+        svm_params.cache_size = svm_cache_size
+    if svm_eps is not None:
+        svm_params.eps = svm_eps
+    if svm_shrinking is not None:
+        svm_params.shrinking = svm_shrinking
     if probability is not None:
         svm_params.probability = probability
 
     return svm_params
 
+def _make_flann_div_params(k=None, num_threads=None, show_progress=None,
+            print_progress=None, flann_params={}, **junk):
+
+    flann_p = lib.FLANNParameters()
+    flann_p.update(**flann_params)
+
+    div_params = lib.DivParams()
+    div_params.flann_params = flann_p
+    if k is not None:
+        div_params.k = k
+    if num_threads is not None:
+        div_params.num_threads = num_threads
+    if show_progress is not None:
+        div_params.show_progress = show_progress
+    if print_progress is not None:
+        div_params.print_progress = \
+                pointer(lib.print_progress_type(print_progress))
+
+    return flann_p, div_params
+
 ################################################################################
 
 
 def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
-        k=None, tuning_folds=3,
-        div_func="renyi:.9", kernel="gaussian",
-        cv_threads=0, num_threads=None,
-        flann_params={},
-        svm_regression_eps=None, svm_cache_size=None, svm_eps=None,
-        svm_shrinking=None, probability=False, 
-        c_vals=None, show_progress=0, print_progress=None):
+        div_func="renyi:.9", kernel="gaussian", tuning_folds=3,
+        cv_threads=0, c_vals=None, **kwargs):
     '''
     Cross-validates an SDM's ability to classify/regress bags into labels.
 
@@ -160,30 +176,13 @@ def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
             [bag.shape[0] for bag in bags], dtype=_c_to_np_types[c_size_t])
 
     # make div params
-    flann_p = lib.FLANNParameters()
-    flann_p.update(**flann_params)
-
-    div_params = lib.DivParams()
-    div_params.flann_params = flann_p
-    if k is not None:
-        div_params.k = k
-    if num_threads is not None:
-        div_params.num_threads = num_threads
-    if show_progress is not None:
-        div_params.show_progress = show_progress
-    if print_progress is not None:
-        div_params.print_progress = lib.print_progress_type(print_progress)
+    flann_p, div_params = _make_flann_div_params(**kwargs)
 
     # make c_vals array
     c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
 
     # make svm params
-    svm_params = _make_svm_params(labtype=labels.dtype,
-            p=svm_regression_eps,
-            cache_size=svm_cache_size,
-            eps=svm_eps,
-            shrinking=svm_shrinking,
-            probability=probability)
+    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
 
     # call the function!
     score = lib.crossvalidate[intype, labtype](

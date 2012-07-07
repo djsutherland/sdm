@@ -43,7 +43,7 @@
 
 # TODO: use ndpointer to verify things are contiguous, aligned, right dims...
 
-from ctypes import (cdll, Structure, POINTER, CFUNCTYPE,
+from ctypes import (cdll, Structure, POINTER, CFUNCTYPE, pointer,
         c_short, c_int, c_uint, c_long, c_ulong, c_float, c_double, c_char_p)
 from ctypes.util import find_library
 
@@ -315,7 +315,7 @@ print_progress_to_stderr = _LIB.print_progress_to_stderr
 print_progress_to_stderr.restype = None
 print_progress_to_stderr.argtypes = [c_size_t]
 
-print_progress_type = POINTER(CFUNCTYPE(None, c_size_t))
+print_progress_type = CFUNCTYPE(None, c_size_t)
 
 class DivParams(CustomStructure):
     _fields_ = [
@@ -323,15 +323,16 @@ class DivParams(CustomStructure):
         ('flann_params', FLANNParameters),
         ('num_threads', c_size_t),
         ('show_progress', c_size_t),
-        ('print_progress', print_progress_type),
+        ('print_progress', POINTER(print_progress_type)),
     ]
 
     _defaults_ = {
         'k': 3,
         'num_threads': 0,
         'show_progress': 0,
-        'print_progress': print_progress_type(print_progress_to_stderr),
+        'print_progress': pointer(print_progress_type(print_progress_to_stderr))
     }
+    # FIXME: print_progress causes bus error :(
 
 ################################################################################
 ### C values
