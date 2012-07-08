@@ -49,6 +49,7 @@ for pref, c_type in _dtypes:
     _np_to_c_types[np_type] = c_type
     _c_to_np_types[c_type] = np_type
 
+c_double_p = POINTER(c_double)
 
 ################################################################################
 ### Parameter checking
@@ -112,7 +113,7 @@ def _check_c_vals(c_vals):
         c_vals = np.squeeze(np.ascontiguousarray(c_vals, dtype=np.double))
         if len(c_vals.shape) != 1 or c_vals.size < 1:
             raise ValueError("c_vals must be a non-empty 1d array of values")
-        return c_vals, c_vals.ctypes.data_as(POINTER(c_double)), c_vals.size
+        return c_vals, c_vals.ctypes.data_as(c_double_p), c_vals.size
     else:
         return None, lib.default_c_vals, lib.num_default_c_vals
 
@@ -204,7 +205,8 @@ def get_divs(x_bags, y_bags=None, div_funcs=['renyi:.9'], **kwargs):
     results = np.empty((len(div_funcs), num_x, num_y),
                        dtype=_c_to_np_types[c_double], order='C')
     results.fill(np.nan)
-    results_p = results.ctypes.data_as(POINTER(c_double))
+    results_p = (c_double_p * len(div_funcs))(*(
+        r_df.ctypes.data_as(c_double_p) for r_df in results))
 
     # call the function
     lib.get_divs[intype](
@@ -305,7 +307,7 @@ def crossvalidate_divs(divs, labels, folds=10, project_all=True, shuffle=True,
 
     # call the function!
     score = lib.crossvalidate_divs[labtype](
-            divs.ctypes.data_as(POINTER(c_double)),
+            divs.ctypes.data_as(c_double_p),
             divs.shape[0],
             labels.ctypes.data_as(POINTER(labtype)),
             kernel.encode('ascii'),
