@@ -94,6 +94,8 @@ enum TLogLevel {logERROR, logWARNING, logINFO,
 void sdm_set_log_level(enum TLogLevel level);
 enum TLogLevel sdm_get_log_level();
 
+////////////////////////////////////////////////////////////////////////////////
+
 // C equivalent of the DivParams class
 typedef struct DivParamsC_s {
     int k;
@@ -106,8 +108,28 @@ typedef struct DivParamsC_s {
 
 void print_progress_to_stderr(size_t num_left);
 
+// function to compute divergences
+// really belongs in an npdivs C wrapper, but it's here for now
+// results should be caller-allocated array of length num_div_specs, 
+//    whose elements are of length num_x * num_y
+// if y_bags is NULL, it's like you passed x in again (but more efficient)
+//    and num_y, y_rows are ignored
+#define NPDIVS(intype) \
+    void np_divs_##intype( \
+        const intype ** x_bags, size_t num_x, const size_t * x_rows, \
+        const intype ** y_bags, size_t num_y, const size_t * y_rows, \
+        size_t dim, \
+        const char ** div_specs, size_t num_div_specs, \
+        double ** results, \
+        const DivParamsC * div_params)
+NPDIVS(float);
+NPDIVS(double);
+#undef NPDIVS
+
+////////////////////////////////////////////////////////////////////////////////
+
 // C structs so we can return an SDM object from these methods
-// declared to have a single SDM<double> or SDM<float> member
+// declared to have a single SDM<intype, labtype> member
 typedef struct SDM_ClassifyD_s SDM_ClassifyD;
 typedef struct SDM_ClassifyF_s SDM_ClassifyF;
 typedef struct SDM_RegressD_s  SDM_RegressD;

@@ -47,6 +47,7 @@
 #include <flann/util/matrix.h>
 
 #include <np-divs/div-funcs/from_str.hpp>
+#include <np-divs/np_divs.hpp>
 
 using namespace sdm;
 using namespace npdivs;
@@ -72,10 +73,13 @@ enum TLogLevel sdm_get_log_level() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
 
 void print_progress_to_stderr(size_t num_left) {
     npdivs::print_progress_cerr(num_left);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct SDM_ClassifyD_s { SDM<double, int> *sdm; };
 struct SDM_ClassifyF_s { SDM<float,  int> *sdm; };
@@ -197,6 +201,81 @@ Matrix<T> *make_matrices(T ** data,
         array[i] = Matrix<T>(const_cast<T *>(data[i]), rows[i], dim);
     return array;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define NPDIVS(intype) \
+    void np_divs_##intype( \
+        const intype ** x_bags, size_t num_x, const size_t * x_rows, \
+        const intype ** y_bags, size_t num_y, const size_t * y_rows, \
+        size_t dim, \
+        const char ** div_specs, size_t num_div_specs, \
+        double ** results, \
+        const DivParamsC * div_params) \
+    { \
+        typedef flann::Matrix<intype> Matrix; \
+        typedef flann::Matrix<double> MatrixD; \
+        \
+        /* make arrays of flann::Matrix for x_bags, y_bags */ \
+        Matrix * x_bags_ms = new Matrix[num_x]; \
+        for (size_t i = 0; i < num_x; i++) { \
+            x_bags_ms[i] = Matrix( \
+                    const_cast<intype *>(x_bags[i]), x_rows[i], dim); \
+        } \
+        \
+        Matrix * y_bags_ms; \
+        if (y_bags == NULL) { \
+            y_bags_ms = NULL; \
+            num_y = num_x; \
+        } else { \
+            y_bags_ms = new Matrix[num_y]; \
+            for (size_t i = 0; i < num_y; i++) { \
+                y_bags_ms[i] = Matrix( \
+                        const_cast<intype *>(y_bags[i]), y_rows[i], dim);\
+            } \
+        } \
+        \
+        /* make boost::ptr_vector<DivFunc> */ \
+        boost::ptr_vector<DivFunc> div_funcs; \
+        for (size_t i = 0; i < num_div_specs; i++) { \
+            div_funcs.push_back(npdivs::div_func_from_str( \
+                        std::string(div_specs[i]))); \
+        } \
+        \
+        /* make flann::Matrix<double> with results as data */ \
+        MatrixD * results_ms = new MatrixD[num_div_specs]; \
+        for (size_t i = 0; i < num_div_specs; i++) { \
+            results_ms[i] = MatrixD(results[i], num_x, num_y); \
+        } \
+        \
+        try { \
+            /* call function */ \
+            npdivs::np_divs( \
+                    x_bags_ms, num_x, \
+                    y_bags_ms, num_y, \
+                    div_funcs, \
+                    results_ms, \
+                    make_div_params(div_params)); \
+            \
+        } catch (std::exception &e) { \
+            FILE_LOG(logERROR) << e.what(); \
+            for (size_t i = 0; i < num_div_specs; i++) { \
+                for (size_t j = 0; j < num_x * num_y; j++) { \
+                    results[i][j] = -1; \
+                } \
+            } \
+            \
+            delete[] x_bags_ms; \
+            delete[] y_bags_ms; \
+            delete[] results_ms; \
+        } \
+        delete[] x_bags_ms; \
+        delete[] y_bags_ms; \
+        delete[] results_ms; \
+    }
+NPDIVS(float);
+NPDIVS(double);
+#undef NPDIVS
 
 ////////////////////////////////////////////////////////////////////////////////
 // training functions

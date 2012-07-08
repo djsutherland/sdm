@@ -18,7 +18,7 @@ int main() {
 
     d[0][0] =  0.;   d[0][1] = 0.1 ;
     d[0][2] =  0.01; d[0][3] = 0.89;
-    d[0][2] = -0.2;  d[0][5] = 0.95;
+    d[0][4] = -0.2;  d[0][5] = 0.95;
 
     d[1][0] =  0.05; d[1][1] = 0.2 ;
     d[1][2] =  0.02; d[1][3] = 0.90;
@@ -107,4 +107,30 @@ int main() {
             &div_params, 2, 0, 1, 1,
             default_c_vals, num_default_c_vals, &default_svm_params, 2);
     printf("CV mean prediction RMSE: %g\n", rmse);
+
+    printf("\n\nComputing divs:\n");
+#define NUM_DFS 2
+    const char * dfs[NUM_DFS] = {"renyi:.9", "hellinger"};
+    double * divs[NUM_DFS];
+    for (i = 0; i < NUM_DFS; i++)
+        divs[i] = (double *) malloc(NUM_BAGS*NUM_BAGS * sizeof(double));
+    np_divs_double(data, NUM_BAGS, rows, NULL, 0, NULL, DIM,
+            dfs, 2, divs, &div_params);
+
+    for (i = 0; i < NUM_DFS; i++)
+        printf("CV with precomp %s, RMSE on means: %g\n", dfs[i],
+            sdm_crossvalidate_regress_divs(
+                divs[i], NUM_BAGS, means, "gaussian", 2, 0, 1, 1,
+                default_c_vals, num_default_c_vals, &default_svm_params, 2)
+        );
+
+    for (int df = 0; df < NUM_DFS; df++) {
+        printf("\n\nDivs (%s):\n", dfs[df]);
+        for (i = 0; i < NUM_BAGS; i++) {
+            for (j = 0; j < NUM_BAGS; j++) {
+                printf("%7.2g ", divs[df][i*NUM_BAGS + j]);
+            }
+            printf("\n");
+        }
+    }
 }
