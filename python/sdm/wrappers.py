@@ -31,13 +31,14 @@
 
 from __future__ import absolute_import
 
-from ctypes import POINTER, pointer, c_int, c_float, c_double, sizeof
+from ctypes import POINTER, pointer, c_int, c_float, c_double, c_char_p, sizeof
 import numbers
 
 import numpy as np
 
 from . import sdm_ctypes as lib
 from .sdm_ctypes import c_size_t
+from .six import b
 
 
 _dtypes = [('i', c_int), ('i', c_size_t), ('f', c_float), ('f', c_double)]
@@ -55,14 +56,15 @@ for pref, c_type in _dtypes:
 _intypes = frozenset(map(np.dtype, (np.float, np.double)))
 _labtypes = frozenset(map(np.dtype, (np.int, np.double)))
 
-def _check_bags(bags):
+def _check_bags(bags, dim=None, _intypes=_intypes):
     bags = [np.ascontiguousarray(bag) for bag in bags]
     if len(bags) <= 1:
         raise ValueError("not enough bags to cross-validate")
 
     if len(bags[0].shape) != 2:
         raise ValueError("bags must be 2d arrays with consistent 2nd dim")
-    dim = bags[0].shape[1]
+    if dim is None:
+        dim = bags[0].shape[1]
 
     dtype = bags[0].dtype
     if dtype not in _intypes:
@@ -77,7 +79,7 @@ def _check_bags(bags):
     return bags
 
 def _check_divs(divs):
-    divs = np.ascontiguousarray(divs, dtype=_c_to_np_type[c_double])
+    divs = np.ascontiguousarray(divs, dtype=_c_to_np_types[c_double])
     if len(divs.shape) != 2:
         raise ValueError("divs must be 2-dimensional")
     a, b = divs.shape
@@ -157,6 +159,67 @@ def _make_flann_div_params(k=None, num_threads=None, show_progress=None,
 
 ################################################################################
 
+def get_divs(x_bags, y_bags=None, div_funcs=['renyi:.9'], **kwargs):
+    # check x bags
+    x_bags = _check_bags(x_bags)
+    num_x = len(x_bags)
+    dim = x_bags[0].shape[1]
+
+    # types for input
+    intype = _np_to_c_types[x_bags[0].dtype]
+    intype_p = POINTER(intype)
+
+    # x bag pointers
+    x_bag_ptrs = (intype_p * num_x)(
+            *[bag.ctypes.data_as(intype_p) for bag in x_bags])
+
+    x_bag_rows = np.ascontiguousarray(
+            [bag.shape[0] for bag in x_bags], dtype=_c_to_np_types[c_size_t])
+    x_bag_rows_p = x_bag_rows.ctypes.data_as(POINTER(c_size_t))
+
+    # check y bags and make pointers
+    if y_bags is None:
+        num_y = num_x
+        y_bag_ptrs = None
+        y_bag_rows_p = None
+    else:
+        y_bags = _check_bags(y_bags, dim=dim, _intypes=(x_bags[0].dtype,))
+        num_y = len(y_bags)
+
+        y_bag_ptrs = (intype_p * num_y)(
+                *[bag.ctypes.data_as(intype_p) for bag in y_bags])
+
+        y_bag_rows = np.ascontiguousarray(
+                [bag.shape[0] for bag in y_bags],
+                dtype=_c_to_np_types[c_size_t])
+        y_bag_rows_p = y_bag_rows.ctypes.data_as(POINTER(c_size_t))
+
+    # make pointer to div_funcs
+    div_func_ptrs = (c_char_p * len(div_funcs))(*(b(df) for df in div_funcs))
+
+    # make div params
+    flann_p, div_params = _make_flann_div_params(**kwargs)
+
+    # allocate results
+    results = np.empty((len(div_funcs), num_x, num_y),
+                       dtype=_c_to_np_types[c_double], order='C')
+    results.fill(np.nan)
+    results_p = results.ctypes.data_as(POINTER(c_double))
+
+    # call the function
+    lib.get_divs[intype](
+            x_bag_ptrs, num_x, x_bag_rows_p,
+            y_bag_ptrs, num_y, y_bag_rows_p,
+            dim,
+            div_func_ptrs, len(div_funcs),
+            results_p,
+            div_params
+    )
+
+    return results
+
+################################################################################
+
 # TODO: stuff involving SDM models
 
 ################################################################################
@@ -179,7 +242,7 @@ def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
     intype_p = POINTER(intype)
 
     labtype = _np_to_c_types[labels.dtype]
-    
+
     # make needed bag data
     bag_ptrs = (intype_p * len(bags))(
             *[bag.ctypes.data_as(intype_p) for bag in bags])

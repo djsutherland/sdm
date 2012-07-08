@@ -45,4 +45,4 @@ __author__ = 'Dougal J. Sutherland <dsutherl@cs.cmu.edu>'
 
 from .sdm_ctypes import get_log_level, set_log_level
 
-from .wrappers import crossvalidate
+from .wrappers import get_divs, crossvalidate, crossvalidate_divs

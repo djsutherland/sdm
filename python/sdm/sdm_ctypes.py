@@ -333,6 +333,22 @@ class DivParams(CustomStructure):
     # FIXME: print_progress causes bus error :(
 
 ################################################################################
+### np_divs wrapper
+
+get_divs = {}
+for name, intype in [('double', c_double), ('float', c_float)]:
+    get_divs[intype] = fn = _LIB['np_divs_' + name]
+    fn.restype = None
+    fn.argtypes = [
+        POINTER(POINTER(intype)), c_size_t, POINTER(c_size_t),
+        POINTER(POINTER(intype)), c_size_t, POINTER(c_size_t),
+        c_size_t,
+        POINTER(c_char_p), c_size_t,
+        POINTER(POINTER(c_double)),
+        POINTER(DivParams),
+    ]
+
+################################################################################
 ### C values
 
 default_c_vals = POINTER(c_double).in_dll(_LIB, 'default_c_vals')
