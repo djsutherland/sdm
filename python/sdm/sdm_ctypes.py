@@ -34,20 +34,17 @@
 # POSSIBILITY OF SUCH DAMAGE.                                                  #
 ################################################################################
 
-# TODO: python 2/3 compatability
-# things to change:
-#     - metaclass syntax for Enum
-#     - .values(), .items()
-#     - dictionary comprehension
-#     - super()
-
 # TODO: use ndpointer to verify things are contiguous, aligned, right dims...
+
+from __future__ import absolute_import
 
 from ctypes import (cdll, Structure, POINTER, CFUNCTYPE, pointer,
         c_short, c_int, c_uint, c_long, c_ulong, c_float, c_double, c_char_p)
 from ctypes.util import find_library
 
 from itertools import product
+
+from .six import with_metaclass, itervalues, iteritems
 
 from numpy import issubclass_
 
@@ -64,7 +61,7 @@ class EnumMeta(type(c_uint)):
         # figure out which members of the class are enum items
         _members = {}
         _rev_members = {}
-        for k, v in classdict.items():
+        for k, v in iteritems(classdict):
             if not k.startswith('_'):
                 try:
                     c_uint(v)
@@ -83,7 +80,7 @@ class EnumMeta(type(c_uint)):
         the_type = type(c_uint).__new__(cls, name, bases, classdict)
 
         # now that the class is finalized, switch members to be of the class
-        for k, v in _members.items():
+        for k, v in iteritems(_members):
             as_class = the_type(v)
             the_type._members[k] = as_class
             setattr(the_type, k, as_class)
@@ -91,26 +88,25 @@ class EnumMeta(type(c_uint)):
         return the_type
 
     def __contains__(self, value):
-        return value in self._members.values()
+        return value in itervalues(self._members)
 
     def __repr__(self):
         return "<Enumeration %s>" % self.__name__
 
 
-class Enum(c_uint, metaclass=EnumMeta):
+class Enum(with_metaclass(EnumMeta, c_uint)):
     def __init__(self, value):
         if isinstance(value, self.__class__):
             value = value.value
         else:
             try:
                 value = self._members[value.upper()].value
-            except KeyError:
-                raise ValueError("invalid %s value %r" %
-                        (self.__class__.__name__, value))
-            except AttributeError:
-                pass # not a string
+            except (AttributeError, KeyError):
+                if value not in self._rev_members:
+                    raise ValueError("invalid %s value %r" %
+                            (self.__class__.__name__, value))
 
-        super().__init__(value)
+        super(Enum, self).__init__(value)
 
     @property
     def name(self):
@@ -144,23 +140,25 @@ def returns_enum(enum_subclass):
 
 # extremely loosely based on code from pyflann.flann_ctypes
 
+_identity = lambda x: x
 class CustomStructure(Structure):
     _defaults_ = {}
     __enums = {}
 
     def __init__(self):
         Structure.__init__(self)
-        self.__enums = {f: t for f, t in self._fields_ if issubclass_(t, Enum)}
+        self.__enums = dict((f, t) for f, t in self._fields_
+                            if issubclass_(t, Enum))
 
-        for field, val in self._defaults_.items():
+        for field, val in iteritems(self._defaults_):
             setattr(self, field, val)
 
     def __setattr__(self, k, v):
-        class_wrapper = self.__enums.get(k, lambda x: x)
-        super().__setattr__(k, class_wrapper(v))
+        class_wrapper = self.__enums.get(k, _identity)
+        super(CustomStructure, self).__setattr__(k, class_wrapper(v))
 
     def update(self, **vals):
-        for k, v in vals.items():
+        for k, v in iteritems(vals):
             setattr(self, k, v)
 
 

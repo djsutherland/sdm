@@ -31,6 +31,18 @@
 
 from __future__ import absolute_import
 
+'''
+Python interface to the SDM library.
+
+Tested with Python 2.7 and 3.2; should also be compatible with 2.6. Known to be
+incompatible with 2.5 and below because they don't have itertools.product (I
+know, right?), though 2.5 support shouldn't be too hard if you really need it.
+2.4 support would require an external install of ctypes.
+'''
+
+__author__ = 'Dougal J. Sutherland <dsutherl@cs.cmu.edu>'
+
+
 from .sdm_ctypes import get_log_level, set_log_level
 
 from .wrappers import crossvalidate

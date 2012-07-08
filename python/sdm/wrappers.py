@@ -76,6 +76,14 @@ def _check_bags(bags):
 
     return bags
 
+def _check_divs(divs):
+    divs = np.ascontiguousarray(divs, dtype=_c_to_np_type[c_double])
+    if len(divs.shape) != 2:
+        raise ValueError("divs must be 2-dimensional")
+    a, b = divs.shape
+    if a != b:
+        raise ValueError("divs must be square")
+    return divs
 
 def _check_labels(labels, num_bags):
     if isinstance(labels[0], str):
@@ -149,6 +157,9 @@ def _make_flann_div_params(k=None, num_threads=None, show_progress=None,
 
 ################################################################################
 
+# TODO: stuff involving SDM models
+
+################################################################################
 
 def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
         div_func="renyi:.9", kernel="gaussian", tuning_folds=3,
@@ -194,6 +205,47 @@ def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
             div_func.encode('ascii'),
             kernel.encode('ascii'),
             div_params,
+            folds, cv_threads, int(project_all), int(shuffle),
+            c_vals_p, num_c_vals,
+            svm_params,
+            tuning_folds)
+    return score
+
+def crossvalidate_divs(divs, labels, folds=10, project_all=True, shuffle=True,
+        kernel='gaussian', tuning_folds=3, cv_threads=0, c_vals=None, **kwargs):
+    '''
+    Cross-validates an SDM's ability to classify/regress samples with
+    precomputed divergences divs into labels.
+    '''
+
+    # check params
+    divs = _check_divs(divs) # XXX
+    labels = _check_labels(labels, divs.shape[0])
+
+    # get ctypes type for output
+    labtype = _np_to_c_types[labels.dtype]
+
+    # make div params
+    flann_p, div_params = _make_flann_div_params(**kwargs)
+
+    # make c_vals array
+    c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+
+    # make svm params
+    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
+
+    # make c_vals array
+    c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+
+    # make svm params
+    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
+
+    # call the function!
+    score = lib.crossvalidate_divs[labtype](
+            divs.ctypes.data_as(POINTER(c_double)),
+            divs.shape[0],
+            labels.ctypes.data_as(POINTER(labtype)),
+            kernel.encode('ascii'),
             folds, cv_threads, int(project_all), int(shuffle),
             c_vals_p, num_c_vals,
             svm_params,
