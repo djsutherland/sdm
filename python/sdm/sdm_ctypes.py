@@ -48,7 +48,11 @@ from .six import with_metaclass, itervalues, iteritems
 
 from numpy import issubclass_
 
-c_size_t = c_ulong
+try:
+    from ctypes import c_size_t
+except ImportError:
+    c_size_t = c_ulong
+
 _LIB = cdll[find_library('sdm')]
 
 ################################################################################
@@ -145,13 +149,13 @@ class CustomStructure(Structure):
     _defaults_ = {}
     __enums = {}
 
-    def __init__(self):
-        Structure.__init__(self)
+    def __init__(self, *args, **kwargs):
         self.__enums = dict((f, t) for f, t in self._fields_
                             if issubclass_(t, Enum))
-
         for field, val in iteritems(self._defaults_):
             setattr(self, field, val)
+
+        Structure.__init__(self, *args, **kwargs)
 
     def __setattr__(self, k, v):
         class_wrapper = self.__enums.get(k, _identity)
@@ -321,16 +325,15 @@ class DivParams(CustomStructure):
         ('flann_params', FLANNParameters),
         ('num_threads', c_size_t),
         ('show_progress', c_size_t),
-        ('print_progress', POINTER(print_progress_type)),
+        ('print_progress', print_progress_type),
     ]
 
     _defaults_ = {
         'k': 3,
         'num_threads': 0,
         'show_progress': 0,
-        'print_progress': pointer(print_progress_type(print_progress_to_stderr))
+        'print_progress': print_progress_type(print_progress_to_stderr),
     }
-    # FIXME: print_progress causes bus error :(
 
 ################################################################################
 ### np_divs wrapper

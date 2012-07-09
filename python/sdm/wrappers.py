@@ -57,6 +57,8 @@ c_double_p = POINTER(c_double)
 _intypes = frozenset(map(np.dtype, (np.float, np.double)))
 _labtypes = frozenset(map(np.dtype, (np.int, np.double)))
 
+_nothing = object()
+
 def _check_bags(bags, dim=None, _intypes=_intypes):
     bags = [np.ascontiguousarray(bag) for bag in bags]
     if len(bags) <= 1:
@@ -118,43 +120,44 @@ def _check_c_vals(c_vals):
         return None, lib.default_c_vals, lib.num_default_c_vals
 
 
-def _make_svm_params(labtype, regression_eps=None,
-                     svm_cache_size=None, svm_eps=None,
-                     svm_shrinking=None, probability=None, **junk):
+def _make_svm_params(labtype, regression_eps=_nothing,
+                     svm_cache_size=_nothing, svm_eps=_nothing,
+                     svm_shrinking=_nothing, probability=_nothing, **junk):
     svm_params = lib.SVMParams()
     if labtype == np.double:
         svm_params.svm_type = lib.SVMType.EPSILON_SVR
 
-    if regression_eps is not None:
+    if regression_eps is not _nothing:
         svm_params.p = regression_eps
-    if svm_cache_size is not None:
+    if svm_cache_size is not _nothing:
         svm_params.cache_size = svm_cache_size
-    if svm_eps is not None:
+    if svm_eps is not _nothing:
         svm_params.eps = svm_eps
-    if svm_shrinking is not None:
+    if svm_shrinking is not _nothing:
         svm_params.shrinking = svm_shrinking
-    if probability is not None:
+    if probability is not _nothing:
         svm_params.probability = probability
 
     return svm_params
 
-def _make_flann_div_params(k=None, num_threads=None, show_progress=None,
-            print_progress=None, flann_params={}, **junk):
+def _make_flann_div_params(k=_nothing, num_threads=_nothing,
+        show_progress=_nothing, print_progress=_nothing,
+        flann_params={}, **junk):
 
     flann_p = lib.FLANNParameters()
     flann_p.update(**flann_params)
 
     div_params = lib.DivParams()
     div_params.flann_params = flann_p
-    if k is not None:
+    if k is not _nothing:
         div_params.k = k
-    if num_threads is not None:
+    if num_threads is not _nothing:
         div_params.num_threads = num_threads
-    if show_progress is not None:
+    if show_progress is not _nothing:
         div_params.show_progress = show_progress
-    if print_progress is not None:
-        div_params.print_progress = \
-                pointer(lib.print_progress_type(print_progress))
+    if print_progress is not _nothing:
+        div_params.print_progress = lib.print_progress_type(
+                print_progress if print_progress is not None else 0)
 
     return flann_p, div_params
 
