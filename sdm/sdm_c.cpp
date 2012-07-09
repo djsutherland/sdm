@@ -109,6 +109,7 @@ void classname##_freeModel(classname * sdm) { \
         m->destroyModelAndProb(); \
         m->destroyTrainBagMatrices(); \
         delete m; \
+        FILE_LOG(logDEBUG) << "deleted SDM model"; \
     } catch (std::exception &e) { \
         FILE_LOG(logERROR) << e.what(); \
     } \
@@ -383,8 +384,10 @@ PRED(SDM_RegressF, float,  double);
         size_t * num_vals) { \
     try { \
         labtype ret; \
+        double ** the_vals; \
         classname##_predict_many_vals( \
-                sdm, &test_bag, 1, &rows, &ret, &vals, num_vals); \
+                sdm, &test_bag, 1, &rows, &ret, &the_vals, num_vals); \
+        vals[0] = the_vals[0]; \
         return ret; \
     } catch (std::exception &e) { \
         FILE_LOG(logERROR) << e.what(); \

@@ -82,10 +82,27 @@ int main() {
         printf("%d: %d\n", i, SDM_ClassifyD_predict(sdm, data[i], rows[i]));
     }
 
-    printf("\n\nMass predictions, with decision values:\n");
-    int *pred_labels = (int *) malloc(NUM_BAGS * sizeof(int));
-    double **dec_vals;
+    printf("\n\nSingle predictions, with decision values:\n");
     size_t num_vals;
+    double *my_vals;
+    int pred;
+    for (i = 0; i < NUM_BAGS; i++) {
+        pred = SDM_ClassifyD_predict_vals(
+                sdm, data[i], rows[i], &my_vals, &num_vals);
+        //SDM_ClassifyD_predict_many_vals(sdm, &data[i], 1, &rows[i],
+        //        &pred, &dec_vals, &num_vals);
+
+        printf("%d: %d   Vals: ", i, pred);
+        for (j = 0; j < num_vals; j++)
+            printf("%g ", my_vals[j]);
+        printf("\n");
+
+        free(my_vals);
+    }
+
+    printf("\n\nMass predictions, with decision values:\n");
+    double **dec_vals;
+    int *pred_labels = (int *) malloc(NUM_BAGS * sizeof(int));
     SDM_ClassifyD_predict_many_vals(sdm, data, NUM_BAGS, rows,
             pred_labels, &dec_vals, &num_vals);
     for (i = 0; i < NUM_BAGS; i++) {
@@ -94,6 +111,9 @@ int main() {
             printf("%g ", dec_vals[i][j]);
         printf("\n");
     }
+    for (i = 0; i < NUM_BAGS; i++)
+        free(dec_vals[i]);
+    free(dec_vals);
 
     SDM_ClassifyD_freeModel(sdm);
 
