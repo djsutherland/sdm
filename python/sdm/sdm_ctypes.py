@@ -53,7 +53,12 @@ try:
 except ImportError:
     c_size_t = c_ulong
 
-_LIB = cdll[find_library('sdm')]
+_loc = find_library('sdm')
+if _loc is not None:
+    _LIB = cdll[_loc]
+else:
+    _LIB = cdll['libsdm.so']
+# TODO more ways to find the library
 
 ################################################################################
 
