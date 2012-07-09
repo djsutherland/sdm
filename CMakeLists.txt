@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project (SDM)
 
-# TODO: automated tests for C interface, CLI, mex interface
+# TODO: automated tests for C, mex, python interfaces and CLI
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
@@ -93,6 +93,7 @@ include_directories(${LAPACK_INCLUDE_DIRS})
 
 # subdirectories with actual content
 add_subdirectory(sdm)
+add_subdirectory(python)
 add_subdirectory(test)
 if(BUILD_MATLAB_BINDINGS)
     add_subdirectory(matlab)
