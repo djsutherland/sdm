@@ -31,7 +31,9 @@
 
 from __future__ import absolute_import
 
-from ctypes import POINTER, pointer, c_int, c_float, c_double, c_char_p, sizeof
+from ctypes import (POINTER, pointer, c_int, c_float, c_double, c_char_p,
+                    cdll, sizeof, byref)
+from ctypes.util import find_library
 import numbers
 
 import numpy as np
@@ -40,6 +42,7 @@ from . import sdm_ctypes as lib
 from .sdm_ctypes import c_size_t
 from .six import b
 
+libc = cdll[find_library('c')]
 
 _dtypes = [('i', c_int), ('i', c_size_t), ('f', c_float), ('f', c_double)]
 _np_to_c_types = {}
@@ -50,6 +53,7 @@ for pref, c_type in _dtypes:
     _c_to_np_types[c_type] = np_type
 
 c_double_p = POINTER(c_double)
+c_size_t_p = POINTER(c_size_t)
 
 ################################################################################
 ### Parameter checking
@@ -79,35 +83,45 @@ def _check_bags(bags, dim=None, _intypes=_intypes):
         if bag.dtype != dtype:
             raise TypeError("bags must have consistent datatype")
 
-    return bags
+    intype = _np_to_c_types[dtype]
+    intype_p = POINTER(intype)
 
-def _check_divs(divs):
+    bag_ptrs = (intype_p * len(bags))(
+            *(bag.ctypes.data_as(intype_p) for bag in bags))
+
+    bag_rows = np.ascontiguousarray(
+            [bag.shape[0] for bag in bags], dtype=_c_to_np_types[c_size_t])
+
+    return bags, intype, bag_ptrs, bag_rows, dim
+
+def _check_divs(divs, num_bags=None):
     divs = np.ascontiguousarray(divs, dtype=_c_to_np_types[c_double])
     if len(divs.shape) != 2:
         raise ValueError("divs must be 2-dimensional")
     a, b = divs.shape
     if a != b:
         raise ValueError("divs must be square")
+    if num_bags is not None and a != num_bags:
+        raise ValueError("divs must be num_bags x num_bags")
     return divs
 
 def _check_labels(labels, num_bags):
     if isinstance(labels[0], str):
         raise NotImplemented("str label mapping not done yet") # TODO
-
     elif isinstance(labels[0], numbers.Integral):
-        dtype = _c_to_np_types[c_int]
-
+        ctype = c_int
     elif isinstance(labels[0], numbers.Real):
-        dtype = _c_to_np_types[c_double]
-
+        ctype = c_double
     else:
         raise TypeError("unknown label type %r" % labels[0].__class__)
+
+    dtype = _c_to_np_types[ctype]
 
     labels = np.squeeze(np.ascontiguousarray(labels, dtype=dtype))
     if labels.shape != (num_bags,):
         raise ValueError("must be as many labels as bags")
 
-    return labels
+    return labels, ctype
 
 
 def _check_c_vals(c_vals):
@@ -124,7 +138,7 @@ def _make_svm_params(labtype, regression_eps=_nothing,
                      svm_cache_size=_nothing, svm_eps=_nothing,
                      svm_shrinking=_nothing, probability=_nothing, **junk):
     svm_params = lib.SVMParams()
-    if labtype == np.double:
+    if labtype == c_double:
         svm_params.svm_type = lib.SVMType.EPSILON_SVR
 
     if regression_eps is not _nothing:
@@ -165,21 +179,9 @@ def _make_flann_div_params(k=_nothing, num_threads=_nothing,
 
 def get_divs(x_bags, y_bags=None, div_funcs=['renyi:.9'], **kwargs):
     # check x bags
-    x_bags = _check_bags(x_bags)
+    x_bags, intype, x_bag_ptrs, x_bag_rows, dim = _check_bags(x_bags)
     num_x = len(x_bags)
-    dim = x_bags[0].shape[1]
-
-    # types for input
-    intype = _np_to_c_types[x_bags[0].dtype]
-    intype_p = POINTER(intype)
-
-    # x bag pointers
-    x_bag_ptrs = (intype_p * num_x)(
-            *[bag.ctypes.data_as(intype_p) for bag in x_bags])
-
-    x_bag_rows = np.ascontiguousarray(
-            [bag.shape[0] for bag in x_bags], dtype=_c_to_np_types[c_size_t])
-    x_bag_rows_p = x_bag_rows.ctypes.data_as(POINTER(c_size_t))
+    x_bag_rows_p = x_bag_rows.ctypes.data_as(c_size_t_p)
 
     # check y bags and make pointers
     if y_bags is None:
@@ -187,16 +189,11 @@ def get_divs(x_bags, y_bags=None, div_funcs=['renyi:.9'], **kwargs):
         y_bag_ptrs = None
         y_bag_rows_p = None
     else:
-        y_bags = _check_bags(y_bags, dim=dim, _intypes=(x_bags[0].dtype,))
+        y_bags, _, y_bag_ptrs, y_bag_rows, _ = _check_bags(
+                y_bags, dim=dim, _intypes=(x_bags[0].dtype,))
         num_y = len(y_bags)
 
-        y_bag_ptrs = (intype_p * num_y)(
-                *[bag.ctypes.data_as(intype_p) for bag in y_bags])
-
-        y_bag_rows = np.ascontiguousarray(
-                [bag.shape[0] for bag in y_bags],
-                dtype=_c_to_np_types[c_size_t])
-        y_bag_rows_p = y_bag_rows.ctypes.data_as(POINTER(c_size_t))
+        y_bag_rows_p = y_bag_rows.ctypes.data_as(c_size_t_p)
 
     # make pointer to div_funcs
     div_func_ptrs = (c_char_p * len(div_funcs))(*(b(df) for df in div_funcs))
@@ -227,6 +224,136 @@ def get_divs(x_bags, y_bags=None, div_funcs=['renyi:.9'], **kwargs):
 
 # TODO: stuff involving SDM models
 
+class SDM():
+    def __init__(self, handle, intype, labtype, dim):
+        self._handle = handle
+        self._intype = intype
+        self._labtype = labtype
+        self._dim = dim
+
+        self._name = lib.get_name[intype, labtype](handle)
+
+    #def __del__(self):
+    #    self.free()
+
+    # XXX FIXME XXX causes segfaults...? (but doesn't from C interface)
+    def free(self):
+        lib.free_model[self.intype, self.labtype](self._handle)
+        self._handle = None
+
+    intype = property(lambda self: self._intype)
+    labtype = property(lambda self: self._labtype)
+
+    name = property(lambda self: self._name)
+    dim = property(lambda self: self._dim)
+
+    in_dtype = property(lambda self: _c_to_np_types[self.intype])
+    lab_dtype = property(lambda self: _c_to_np_types[self.labtype])
+
+    def __repr__(self):
+        return '<%s>' % self.name.decode('ascii')
+
+    def predict(self, bags, get_dec_values=False):
+        intype = self.intype
+        labtype = self.labtype
+
+        elem_ndim = len(np.asanyarray(bags[0]).shape)
+        if not 1 <= elem_ndim <= 2:
+            raise ValueError("bags must have 2 or 3 dimensions")
+
+        if elem_ndim == 1:
+            bag = np.ascontiguousarray(bags, dtype=self.in_dtype)
+            if bag.shape[1] != self.dim:
+                raise ValueError("test bag must be of dimension %d" % self.dim)
+
+            bag_ptr = bag.ctypes.data_as(POINTER(self.intype))
+
+            if get_dec_values:
+                vals_p = c_double_p()
+                num_vals = c_size_t()
+
+                pred_label = lib.predict_vals[intype, labtype](
+                        self._handle, bag_ptr, bag.shape[0],
+                        byref(vals_p), byref(num_vals))
+
+                vals = np.empty(num_vals.value)
+                for i in range(num_vals.value):
+                    vals[i] = vals_p[i]
+                libc.free(vals_p)
+
+                return pred_label, vals
+
+            else:
+                pred_label = lib.predict[intype, labtype](
+                        self._handle, bag_ptr, bag.shape[0])
+                return pred_label
+
+        elif elem_ndim == 2:
+            bags, _, bag_ptrs, bag_rows, _ = \
+                    _check_bags(bags, self.dim, (self.in_dtype,))
+            bag_rows_p = bag_rows.ctypes.data_as(c_size_t_p)
+
+            preds = np.empty(len(bags), dtype=self.lab_dtype)
+            preds_p = preds.ctypes.data_as(POINTER(labtype))
+
+            if get_dec_values:
+                vals_p = (POINTER(c_double_p))()
+                num_vals = c_size_t()
+
+                lib.predict_many_vals[intype, labtype](
+                        self._handle,
+                        bag_ptrs, len(bags), bag_rows_p,
+                        preds_p,
+                        byref(vals_p), byref(num_vals))
+
+                vals = np.empty((len(bags), num_vals.value))
+                for i in range(len(bags)):
+                    bag_vals_p = vals_p[i]
+                    for j in range(num_vals.value):
+                        vals[i, j] = bag_vals_p[j]
+                    libc.free(bag_vals_p)
+                libc.free(vals_p)
+
+                return preds, vals
+
+            else:
+                lib.predict_many[intype, labtype](
+                        self._handle,
+                        bag_ptrs, len(bags), bag_rows_p,
+                        preds_p)
+
+                return preds
+
+
+
+def train(bags, labels,
+          div_func='renyi:.9', kernel='gaussian',
+          tuning_folds=3, c_vals=None, divs=None, **kwargs):
+
+    bags, intype, bag_ptrs, bag_rows, dim = _check_bags(bags)
+    labels, labtype = _check_labels(labels, len(bags))
+    if divs is not None:
+        divs = _check_divs(divs, len(bags))
+
+    flann_p, div_params = _make_flann_div_params(**kwargs)
+    c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+    svm_params = _make_svm_params(labtype=labtype, **kwargs)
+
+    handle = lib.train[intype, labtype](
+            bag_ptrs, len(bags), dim,
+            bag_rows.ctypes.data_as(c_size_t_p),
+            labels.ctypes.data_as(POINTER(labtype)),
+            div_func.encode('ascii'),
+            kernel.encode('ascii'),
+            div_params,
+            c_vals_p, num_c_vals,
+            svm_params,
+            tuning_folds,
+            divs)
+
+    return SDM(handle, intype, labtype, dim)
+
+
 ################################################################################
 
 def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
@@ -238,37 +365,16 @@ def crossvalidate(bags, labels, folds=10, project_all=True, shuffle=True,
         * flann_params: a dict of args for a FLANNParameters struct
     '''
 
-    # check params
-    bags = _check_bags(bags)
-    labels = _check_labels(labels, len(bags))
+    bags, intype, bag_ptrs, bag_rows, dim = _check_bags(bags)
+    labels, labtype = _check_labels(labels, len(bags))
 
-    # get ctypes types for input, output
-    intype = _np_to_c_types[bags[0].dtype]
-    intype_p = POINTER(intype)
-
-    labtype = _np_to_c_types[labels.dtype]
-
-    # make needed bag data
-    bag_ptrs = (intype_p * len(bags))(
-            *[bag.ctypes.data_as(intype_p) for bag in bags])
-    bag_rows = np.ascontiguousarray(
-            [bag.shape[0] for bag in bags], dtype=_c_to_np_types[c_size_t])
-
-    # make div params
     flann_p, div_params = _make_flann_div_params(**kwargs)
-
-    # make c_vals array
     c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+    svm_params = _make_svm_params(labtype=labtype, **kwargs)
 
-    # make svm params
-    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
-
-    # call the function!
     score = lib.crossvalidate[intype, labtype](
-            bag_ptrs,
-            len(bags),
-            bag_rows.ctypes.data_as(POINTER(c_size_t)),
-            bags[0].shape[1],
+            bag_ptrs, len(bags),
+            bag_rows.ctypes.data_as(c_size_t_p), dim,
             labels.ctypes.data_as(POINTER(labtype)),
             div_func.encode('ascii'),
             kernel.encode('ascii'),
@@ -286,29 +392,13 @@ def crossvalidate_divs(divs, labels, folds=10, project_all=True, shuffle=True,
     precomputed divergences divs into labels.
     '''
 
-    # check params
-    divs = _check_divs(divs) # XXX
-    labels = _check_labels(labels, divs.shape[0])
+    divs = _check_divs(divs)
+    labels, labtype = _check_labels(labels, divs.shape[0])
 
-    # get ctypes type for output
-    labtype = _np_to_c_types[labels.dtype]
-
-    # make div params
     flann_p, div_params = _make_flann_div_params(**kwargs)
-
-    # make c_vals array
     c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+    svm_params = _make_svm_params(labtype=labtype, **kwargs)
 
-    # make svm params
-    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
-
-    # make c_vals array
-    c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
-
-    # make svm params
-    svm_params = _make_svm_params(labtype=labels.dtype, **kwargs)
-
-    # call the function!
     score = lib.crossvalidate_divs[labtype](
             divs.ctypes.data_as(c_double_p),
             divs.shape[0],
