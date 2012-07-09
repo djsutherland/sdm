@@ -217,23 +217,15 @@ Matrix<T> *make_matrices(T ** data,
         typedef flann::Matrix<double> MatrixD; \
         \
         /* make arrays of flann::Matrix for x_bags, y_bags */ \
-        Matrix * x_bags_ms = new Matrix[num_x]; \
-        for (size_t i = 0; i < num_x; i++) { \
-            x_bags_ms[i] = Matrix( \
-                    const_cast<intype *>(x_bags[i]), x_rows[i], dim); \
-        } \
+        const Matrix * x_bags_ms = make_matrices( \
+                const_cast<intype **>(x_bags), num_x, x_rows, dim); \
         \
-        Matrix * y_bags_ms; \
-        if (y_bags == NULL) { \
-            y_bags_ms = NULL; \
+        const Matrix * y_bags_ms = \
+            (y_bags == NULL) ? NULL : \
+            make_matrices(const_cast<intype **>(y_bags), num_y, y_rows, dim); \
+        \
+        if (y_bags == NULL) \
             num_y = num_x; \
-        } else { \
-            y_bags_ms = new Matrix[num_y]; \
-            for (size_t i = 0; i < num_y; i++) { \
-                y_bags_ms[i] = Matrix( \
-                        const_cast<intype *>(y_bags[i]), y_rows[i], dim);\
-            } \
-        } \
         \
         /* make boost::ptr_vector<DivFunc> */ \
         boost::ptr_vector<DivFunc> div_funcs; \
