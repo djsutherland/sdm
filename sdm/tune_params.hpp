@@ -350,10 +350,14 @@ std::pair<size_t, size_t> tune_params(
     size_t kern_start = 0;
 
     // give each thread a few kernels and get their most-accurate configs
+    // TODO: better allocation algo
     for (size_t i = 0; i < num_threads; i++) {
-        size_t n_kerns =
-            std::min(kern_start+kerns_per_thread, num_kernels)
-            - kern_start;
+        int n_kerns =
+            (int)(std::min(kern_start+kerns_per_thread, num_kernels))
+            - (int)(kern_start);
+
+        if (n_kerns <= 0)
+            break;
 
         workers.push_back(new tune_params_worker<label_type>(
                     divs, num_bags, labels,
