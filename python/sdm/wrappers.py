@@ -130,7 +130,7 @@ def _check_labels(labels, num_bags):
 
 def _check_c_vals(c_vals):
     if c_vals is not None:
-        c_vals = np.squeeze(np.ascontiguousarray(c_vals, dtype=np.double))
+        c_vals = np.ascontiguousarray(c_vals, dtype=_c_to_np_types[c_double])
         if len(c_vals.shape) != 1 or c_vals.size < 1:
             raise ValueError("c_vals must be a non-empty 1d array of values")
         return c_vals, c_vals.ctypes.data_as(c_double_p), c_vals.size
