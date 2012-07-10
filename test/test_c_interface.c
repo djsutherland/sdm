@@ -117,6 +117,20 @@ int main() {
 
     SDM_ClassifyD_freeModel(sdm);
 
+    printf("\n\nTransduction on last 2: ");
+    int trans_preds[2];
+    SDM_ClassifyD_transduct(
+            data, NUM_BAGS - 2, rows,
+            data + NUM_BAGS - 2, 2, rows + NUM_BAGS - 2,
+            DIM, labels,
+            "renyi:.9", "gaussian", &div_params,
+            default_c_vals, num_default_c_vals, &default_svm_params, 2,
+            NULL, trans_preds);
+    printf("%d (%d), %d (%d)\n",
+            trans_preds[0], labels[NUM_BAGS - 2],
+            trans_preds[1], labels[NUM_BAGS - 1]);
+
+
     div_params.show_progress = 5;
     div_params.print_progress = print_progress_to_stderr;
 

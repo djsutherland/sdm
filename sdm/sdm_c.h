@@ -167,6 +167,34 @@ TRAIN(SDM_RegressD, double, double);
 TRAIN(SDM_RegressF, float,  double);
 #undef TRAIN
 
+// transduction functions: train on train data and predict on test, but take
+// unlabeled test data into account during training (for PSD projection)
+#define TRANSDUCT(classname, intype, labtype) \
+    void classname##_transduct( \
+        const intype ** train_bags, \
+        size_t num_train, \
+        const size_t * train_rows, \
+        const intype ** test_bags, \
+        size_t num_test, \
+        const size_t * test_rows, \
+        size_t dim, \
+        const labtype * train_labels, \
+        const char * div_func_spec, \
+        const char * kernel_spec, \
+        const DivParamsC *div_params, \
+        const double * c_vals, size_t num_c_vals, \
+        const struct svm_parameter * svm_params, \
+        size_t tuning_folds, \
+        double * divs, \
+        labtype * preds)
+TRANSDUCT(SDM_ClassifyD, double, int);
+TRANSDUCT(SDM_ClassifyF, float,  int);
+TRANSDUCT(SDM_RegressD, double, double);
+TRANSDUCT(SDM_RegressF, float,  double);
+#undef TRANSDUCT
+
+
+
 // prediction functions
 // single item, label only
 #define PRED(classname, intype, labtype) \

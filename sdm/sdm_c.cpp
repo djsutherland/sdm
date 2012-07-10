@@ -348,6 +348,64 @@ TRAIN(SDM_RegressD,  double, double);
 TRAIN(SDM_RegressF,  float,  double);
 #undef TRAIN
 
+
+#define TRANSDUCT(classname, intype, labtype) \
+    void classname##_transduct( \
+        const intype ** train_bags, \
+        size_t num_train, \
+        const size_t * train_rows, \
+        const intype ** test_bags, \
+        size_t num_test, \
+        const size_t * test_rows, \
+        size_t dim, \
+        const labtype * train_labels, \
+        const char * div_func_spec, \
+        const char * kernel_spec, \
+        const DivParamsC *div_params, \
+        const double * c_vals, size_t num_c_vals, \
+        const struct svm_parameter * svm_params, \
+        size_t tuning_folds, \
+        double * divs, \
+        labtype * preds) \
+{ \
+    try { \
+        size_t num_bags = num_train + num_test; \
+        \
+        /* make array of matrices pointing to data */ \
+        Matrix<intype> * combo_bags_m = new Matrix<intype>[num_bags]; \
+        for (size_t i = 0; i < num_train; i++) \
+            combo_bags_m[i] = Matrix<intype>( \
+                    const_cast<intype *>(train_bags[i]), train_rows[i], dim); \
+        for (size_t i = 0; i < num_test; i++) \
+            combo_bags_m[num_train + i] = Matrix<intype>( \
+                    const_cast<intype *>(test_bags[i]), test_rows[i], dim); \
+        \
+        /* make other params */ \
+        std::vector<labtype> labels(train_labels, train_labels + num_train); \
+        npdivs::DivFunc *df = div_func_from_str(string(div_func_spec)); \
+        KernelGroup *kernel = kernel_group_from_str(string(kernel_spec)); \
+        std::vector<double> cs(c_vals, c_vals + num_c_vals); \
+        \
+        /* do the actual work */ \
+        std::vector<labtype> preds_v = transduct_sdm<intype, labtype>( \
+                combo_bags_m, num_train, num_test, labels, \
+                *df, *kernel, make_div_params(div_params), cs, *svm_params, \
+                tuning_folds, divs); \
+        \
+        std::copy(preds_v.begin(), preds_v.end(), preds); \
+        \
+    } catch (std::exception &e) { \
+        FILE_LOG(logERROR) << e.what(); \
+        for (size_t i = 0; i < num_test; i++) \
+            preds[i] = -0xdead; \
+    } \
+}
+TRANSDUCT(SDM_ClassifyD, double, int);
+TRANSDUCT(SDM_ClassifyF, float,  int);
+TRANSDUCT(SDM_RegressD, double, double);
+TRANSDUCT(SDM_RegressF, float,  double);
+#undef TRANSDUCT
+
 ////////////////////////////////////////////////////////////////////////////////
 // prediction functions
 
