@@ -35,7 +35,9 @@
 #include "sdm/kernel_projection.hpp"
 #include "sdm/log.hpp"
 
+#include <algorithm>
 #include <limits>
+#include <stdexcept>
 
 #include <boost/type_traits/is_same.hpp>
 #include <boost/static_assert.hpp>
@@ -48,6 +50,9 @@ namespace sdm {
 namespace detail {
 
 // the main thing: cross-validation over possible svm / kernel parameters
+// NOTE: if labels.size() < num_bags, it's assumed that we're transducting
+// with the first labels.size() as training and the rest as testing. so, the
+// rest are kept around for the kernel projection but are otherwise ignored.
 template <typename label_type>
 std::pair<size_t, size_t> tune_params(
         const double* divs, size_t num_bags,
@@ -57,6 +62,7 @@ std::pair<size_t, size_t> tune_params(
         const svm_parameter &svm_params,
         size_t folds,
         size_t num_threads);
+
 
 // pick random element from a vector
 template <typename T>
@@ -71,6 +77,21 @@ T pick_rand(std::vector<T> vec) {
         // use c++'s silly random number generator; good enough for this
         // note that srand() should've been called before this
         return vec[std::rand() % n];
+    }
+}
+
+// copy an upper-left square block from one square row-major matrix to another
+template <typename T>
+void copy_upper(T * source, T * dest, size_t num_source, size_t num_dest) {
+    if (num_dest > num_source) {
+        throw std::invalid_argument("copy_upper: num_dest > num_source");
+    } else if (num_source == num_dest) {
+        std::copy(source, source + num_source*num_source, dest);
+    } else {
+        for (size_t i = 0; i < num_dest; i++) {
+            T * row_start = source + i * num_source;
+            std::copy(row_start, row_start + num_dest, dest + i * num_dest);
+        }
     }
 }
 
@@ -101,7 +122,7 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
         double *final_score)
 {
     typedef std::pair<size_t, size_t> config;
-    
+
     // this only works for int or double label_types
     BOOST_STATIC_ASSERT((
         boost::is_same<label_type, int>::value ||
@@ -119,10 +140,15 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
     }
 
     // make our svm_problem that we'll be reusing throughout
+    size_t num_train = labels.size();
+    if (num_train > num_bags) {
+        throw std::invalid_argument("tune_params: more labels than bags");
+    }
+
     svm_problem *prob = new svm_problem;
-    prob->l = num_bags;
-    prob->y = new double[num_bags];
-    for (size_t i = 0; i < num_bags; i++)
+    prob->l = num_train;
+    prob->y = new double[num_train];
+    for (size_t i = 0; i < num_train; i++)
         prob->y[i] = (double) labels[i];
 
     // store un-transformed divs in the problem just so it's all allocated
@@ -130,9 +156,11 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
 
     // make a copy of divergences so we can mangle it
     double *km = new double[num_bags * num_bags];
+    double *km_train = (num_train < num_bags) ?
+                       new double[num_train * num_train] : km;
 
     // used to store labels into during CV
-    double *cv_labels = new double[num_bags];
+    double *cv_labels = new double[num_train];
 
     for (size_t k = 0; k < num_kernels; k++) {
         // turn into a kernel matrix
@@ -147,10 +175,15 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
             continue;
         }
 
+        // copy the top-left corner into km_train if necessary
+        if (km_train != km)
+            copy_upper(km, km_train, num_bags, num_train);
+
         // store in the svm_problem
-        store_kernel_matrix(*prob, km, false);
+        store_kernel_matrix(*prob, km_train, false);
 
         // TODO: add epsilon-SVR's epsilon (svm_params.p) to the grid search
+        // (preferably by generalizing this notion of parameter tuning)
         for (size_t ci = 0; ci < c_vals.size(); ci++) {
             // do SVM cross-validation with these params
             svm_params.C = c_vals[ci];
@@ -160,22 +193,22 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
 
             if (boost::is_same<label_type, int>::value) {
                 // integer type; get classification accuracy
-                for (size_t i = 0; i < num_bags; i++)
+                for (size_t i = 0; i < num_train; i++)
                     if (cv_labels[i] == labels[i])
                         score++;
 
                 FILE_LOG(logDEBUG2) << "tuning: " <<
-                    score << "/" << num_bags
+                    score << "/" << num_train
                      << " by " << kernels[k]->name() << ", C = " << c_vals[ci];
 
 
             } else {
                 // double type; get *negative* squared err (so max is best)
-                for (size_t i = 0; i < num_bags; i++) {
+                for (size_t i = 0; i < num_train; i++) {
                     double diff = cv_labels[i] - labels[i];
                     score -= diff * diff;
                 }
-                    
+
                 FILE_LOG(logDEBUG2) << "tuning: " << score
                      << " by " << kernels[k]->name() << ", C = " << c_vals[ci];
             }
@@ -190,10 +223,12 @@ std::vector< std::pair<size_t, size_t> > tune_params_single(
         }
     }
 
+    if (km_train != km)
+        delete[] km_train;
     delete[] km;
     delete[] cv_labels;
 
-    for (size_t i = 0; i < num_bags; i++)
+    for (size_t i = 0; i < num_train; i++)
         delete[] prob->x[i];
     delete[] prob->x;
     delete[] prob->y;

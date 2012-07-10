@@ -285,6 +285,24 @@ class EasySmallSDMTest : public ::testing::Test {
         return vals;
     }
 
+    void testTransduct(
+            const npdivs::DivFunc &div_func,
+            const KernelGroup &kernel_group,
+            const vector<double> &cs = default_c_vals,
+            size_t tuning_folds = NUM_TRAIN)
+    {
+        // get transductive predictions
+        vector<int> pred_labs = transduct_sdm(
+            train, num_train, labels, test, num_test,
+            div_func, kernel_group, div_params, cs, svm_params, tuning_folds);
+
+        // check that labels are as expected
+        for (size_t i = 0; i < num_test; i++) {
+            EXPECT_EQ(test_labels[i], pred_labs[i]) << "mislabeled #" << i;
+        }
+    }
+
+
     double testTrainTestRegression(
             const vector<double> &train_labs,
             const vector<double> &test_labs,
@@ -388,6 +406,26 @@ TEST_F(EasySmallSDMTest, PolyCVTrainingTesting) {
 
     const vector< vector<double> > &vals =
         testTrainTest(div_func, kernel_group);
+}
+
+TEST_F(EasySmallSDMTest, RenyiCVTransduction) {
+    npdivs::DivRenyi div_func(.99);
+    GaussianKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    testTransduct(div_func, kernel_group);
+}
+
+TEST_F(EasySmallSDMTest, PolyCVTransduction) {
+    npdivs::DivLinear div_func;
+    PolynomialKernelGroup kernel_group;
+
+    svm_params.probability = 0;
+    div_params.k = 2;
+
+    testTransduct(div_func, kernel_group);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

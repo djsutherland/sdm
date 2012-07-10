@@ -68,6 +68,7 @@ namespace sdm {
 // TODO: probability models seem to just suck (at least on one example)
 //       - is this a bug or something wrong with the model?
 // TODO: memory ownership with this is all screwy...make it clearer
+// TODO: switch from arbitrary typenames for label_type to an enum of kinds
 template <typename Scalar, typename label_type>
 class SDM {
     const svm_model &svm;
@@ -178,6 +179,8 @@ class SDM {
 // The destroyModelAndProb() and destroyTrainBags() functions might be
 // helpful for this.
 //
+// NOTE: divs, if passed, is transformed into the kernel values.
+//
 // TODO: a mass-training method for more than one kernel
 // TODO: option to do the projection on test data as well
 // TODO: more flexible tuning CV options...tune on a subset of the data?
@@ -191,8 +194,45 @@ SDM<Scalar, label_type> * train_sdm(
     const std::vector<double> &c_vals = default_c_vals,
     const svm_parameter &svm_params = default_svm_params,
     size_t tuning_folds = 3,
+    double *divs = NULL,
+    bool allow_transduction = false);
+
+// Function that gets divergences among the training and test data,
+// projects them to be a valid kernel, trains an SDM on the training data,
+// and returns its predicted labels for the test data.
+// If passed, divs should be the divergences of
+//      test-to-test   test-to-train
+//      train-to-test  train-to-train
+// as a row-major, (num_train + num_test) x (num_train + num_test) matrix.
+template <typename Scalar, typename label_type>
+std::vector<label_type> transduct_sdm(
+    const flann::Matrix<Scalar> *train_bags, size_t num_train,
+    const std::vector<label_type> &train_labels,
+    const flann::Matrix<Scalar> *test_bags, size_t num_test,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    const std::vector<double> &c_vals = default_c_vals,
+    const svm_parameter &svm_params = default_svm_params,
+    size_t tuning_folds = 3,
     double *divs = NULL);
 
+// As above, but with training and test bags concatenated into the same
+// array (training first).
+// The above overload just copies the data and calls this one, so this is
+// better if you can put it in this format initially.
+template <typename Scalar, typename label_type>
+std::vector<label_type> transduct_sdm(
+    const flann::Matrix<Scalar> *train_test_bags,
+    size_t num_train, size_t num_test,
+    const std::vector<label_type> &train_labels,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    const std::vector<double> &c_vals = default_c_vals,
+    const svm_parameter &svm_params = default_svm_params,
+    size_t tuning_folds = 3,
+    double *divs = NULL);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -242,7 +282,7 @@ void SDM<Scalar, label_type>::destroyTrainBagMatrices() {
 
 template <typename Scalar, typename label_type>
 SDM<Scalar, label_type> * train_sdm(
-        const flann::Matrix<Scalar> *train_bags, size_t num_train,
+        const flann::Matrix<Scalar> *train_bags, size_t num_bags,
         const std::vector<label_type> &labels,
         const npdivs::DivFunc &div_func,
         const KernelGroup &kernel_group,
@@ -250,13 +290,15 @@ SDM<Scalar, label_type> * train_sdm(
         const std::vector<double> &c_vals,
         const svm_parameter &svm_params,
         size_t tuning_folds,
-        double* divs)
+        double* divs,
+        bool allow_transduction)
 {
     if (c_vals.size() == 0) {
         BOOST_THROW_EXCEPTION(std::length_error("c_vals is empty"));
-    } else if (labels.size() != num_train) {
-        BOOST_THROW_EXCEPTION(std::length_error(
-                    "labels.size() disagrees with num_train"));
+    } else if (labels.size() != num_bags) {
+        if (!allow_transduction || labels.size() > num_bags)
+            BOOST_THROW_EXCEPTION(std::length_error(
+                        "labels.size() disagrees with num_bags"));
     }
 
     // copy the svm params so we can change them
@@ -273,8 +315,8 @@ SDM<Scalar, label_type> * train_sdm(
         FILE_LOG(logDEBUG) << "train: computing divergences";
 
         flann::Matrix<double>* divs_f =
-            npdivs::alloc_matrix_array<double>(1, num_train, num_train);
-        np_divs(train_bags, num_train, div_func, divs_f, div_params, false);
+            npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
+        np_divs(train_bags, num_bags, div_func, divs_f, div_params, false);
 
         divs = divs_f[0].ptr();
         free_divs = true;
@@ -282,11 +324,11 @@ SDM<Scalar, label_type> * train_sdm(
     }
 
     // symmetrize divergence estimates
-    symmetrize(divs, num_train);
+    symmetrize(divs, num_bags);
 
     // ask the kernel group for the kernels we'll pick from for tuning
     const boost::ptr_vector<Kernel>* kernels =
-        kernel_group.getTuningVector(divs, num_train);
+        kernel_group.getTuningVector(divs, num_bags);
 
     // tune_params will need this
     std::srand(unsigned(std::time(NULL)));
@@ -294,7 +336,7 @@ SDM<Scalar, label_type> * train_sdm(
     // tuning: cross-validate over possible svm/kernel parameters
     FILE_LOG(logDEBUG) << "train: tuning parameters";
     const std::pair<size_t, size_t> &best_config =
-        detail::tune_params<label_type>(divs, num_train, labels, *kernels,
+        detail::tune_params<label_type>(divs, num_bags, labels, *kernels,
                 c_vals, svm_p, tuning_folds, div_params.num_threads);
 
     // copy the kernel object so we can free the rest
@@ -306,19 +348,28 @@ SDM<Scalar, label_type> * train_sdm(
         "; C = " << c_vals[best_config.second];
 
     // compute the final kernel matrix
-    kernel->transformDivergences(divs, num_train);
-    project_to_symmetric_psd(divs, num_train);
+    kernel->transformDivergences(divs, num_bags);
+    project_to_symmetric_psd(divs, num_bags);
 
     FILE_LOG(logDEBUG3) << "train: final kernel matrix is:\n" <<
-        detail::matrixToString(divs, num_train, num_train);
+        detail::matrixToString(divs, num_bags, num_bags);
 
     // set up the svm_problem
+    size_t num_train = labels.size();
     svm_problem *prob = new svm_problem;
     prob->l = num_train;
     prob->y = new double[num_train];
     for (size_t i = 0; i < num_train; i++)
         prob->y[i] = labels[i];
-    detail::store_kernel_matrix(*prob, divs, true);
+
+    if (num_train < num_bags) {
+        double * train_divs = new double[num_train * num_train];
+        detail::copy_upper(divs, train_divs, num_bags, num_train);
+        detail::store_kernel_matrix(*prob, train_divs, true);
+        delete[] train_divs;
+    } else {
+        detail::store_kernel_matrix(*prob, divs, true);
+    }
 
     // don't need the kernel values anymore
     if (free_divs)
@@ -343,6 +394,102 @@ SDM<Scalar, label_type> * train_sdm(
     delete kernel; // copied in the constructor
     return sdm;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Transduction
+
+
+template <typename Scalar, typename label_type>
+std::vector<label_type> transduct_sdm(
+    const flann::Matrix<Scalar> *train_bags, size_t num_train,
+    const std::vector<label_type> &train_labels,
+    const flann::Matrix<Scalar> *test_bags, size_t num_test,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    const std::vector<double> &c_vals,
+    const svm_parameter &svm_params,
+    size_t tuning_folds,
+    double *divs)
+{
+    typedef flann::Matrix<Scalar> Matrix;
+
+    Matrix * combo_bags = new Matrix[num_train + num_test];
+    for (size_t i = 0; i < num_train; i++)
+        combo_bags[i] = train_bags[i];
+    for (size_t i = 0; i < num_test; i++)
+        combo_bags[num_train + i] = test_bags[i];
+
+    return transduct_sdm(
+            combo_bags, num_train, num_test, train_labels,
+            div_func, kernel_group, div_params,
+            c_vals, svm_params, tuning_folds, divs);
+}
+
+template <typename Scalar, typename label_type>
+std::vector<label_type> transduct_sdm(
+    const flann::Matrix<Scalar> *train_test_bags,
+    size_t num_train, size_t num_test,
+    const std::vector<label_type> &train_labels,
+    const npdivs::DivFunc &div_func,
+    const KernelGroup &kernel_group,
+    const npdivs::DivParams &div_params,
+    const std::vector<double> &c_vals,
+    const svm_parameter &svm_params,
+    size_t tuning_folds,
+    double *divs)
+{
+    size_t num_bags = num_train + num_test;
+    if (train_labels.size() != num_train) {
+        throw std::invalid_argument(
+                "tranduct: train_labels.size() disagrees with num_train");
+    }
+
+    // we want to make sure we're getting divs transformed into kernels by
+    // train_sdm, so we don't have to recalculate them for prediction
+    bool free_divs = false;
+    if (divs == NULL) {
+        FILE_LOG(logDEBUG) << "transduct: computing divergences";
+
+        flann::Matrix<double>* divs_f =
+            npdivs::alloc_matrix_array<double>(1, num_bags, num_bags);
+        np_divs(train_test_bags, num_bags, div_func, divs_f, div_params, false);
+
+        divs = divs_f[0].ptr();
+        free_divs = true;
+        delete[] divs_f; // just deletes the Matrix objects, not the data
+    }
+
+    // train the model
+    FILE_LOG(logDEBUG) << "transduct: training model";
+    SDM<Scalar, label_type> * model = train_sdm(
+            train_test_bags, num_train + num_test, train_labels,
+            div_func, kernel_group, div_params, c_vals, svm_params,
+            tuning_folds, divs, true);
+
+    // get out the bottom-left block of divs, which is now kernel vals :)
+    double test_to_train_kerns[num_test * num_train];
+    for (size_t i = 0; i < num_test; i++) {
+        double * row_start = divs + (num_train + i) * num_bags;
+
+        std::copy(row_start, row_start + num_train,
+                  test_to_train_kerns + i * num_train);
+    }
+
+    // do predictions
+    FILE_LOG(logDEBUG) << "transduct: making predictions";
+    std::vector<label_type> preds;
+    std::vector< std::vector<double> > vals; // TODO: support returning these
+    model->predict_from_kerns(test_to_train_kerns, num_test, preds, vals);
+
+    // clean up
+    model->destroyModelAndProb();
+    delete model;
+
+    return preds;
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Prediction

@@ -53,35 +53,55 @@ template class SDM<float, double>;
 template class SDM<double, double>;
 
 
-template SDM<float, int> * train_sdm<float>(
-    const flann::Matrix<float> *train_bags, size_t num_train,
-    const std::vector<int> &labels,
-    const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
+#define TRAIN_INST(intype, labtype) \
+template SDM<intype, labtype> * train_sdm<intype, labtype>( \
+    const flann::Matrix<intype> *train_bags, size_t num_train, \
+    const std::vector<labtype> &labels, \
+    const npdivs::DivFunc &div_func, const KernelGroup &kernel_group, \
+    const npdivs::DivParams &div_params, const std::vector<double> &c_vals, \
+    const svm_parameter &svm_params, size_t tuning_folds, double* divs, \
+    bool allow_transduction);
+TRAIN_INST(float,  int);
+TRAIN_INST(double, int);
+TRAIN_INST(float,  double);
+TRAIN_INST(double, double);
+#undef TRAIN_INST
 
-template SDM<double, int> * train_sdm<double>(
-    const flann::Matrix<double> *train_bags, size_t num_train,
-    const std::vector<int> &labels,
-    const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
+#define TRANS_INST(Scalar, label_type) \
+template std::vector<label_type> transduct_sdm<Scalar, label_type>( \
+    const flann::Matrix<Scalar> *train_bags, size_t num_train, \
+    const std::vector<label_type> &train_labels, \
+    const flann::Matrix<Scalar> *test_bags, size_t num_test, \
+    const npdivs::DivFunc &div_func, \
+    const KernelGroup &kernel_group, \
+    const npdivs::DivParams &div_params, \
+    const std::vector<double> &c_vals, \
+    const svm_parameter &svm_params, \
+    size_t tuning_folds, \
+    double *divs);
+TRANS_INST(float,  int);
+TRANS_INST(double, int);
+TRANS_INST(float,  double);
+TRANS_INST(double, double);
+#undef TRANS_INST
 
-template SDM<float, double> * train_sdm<float>(
-    const flann::Matrix<float> *train_bags, size_t num_train,
-    const std::vector<double> &labels,
-    const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
-
-template SDM<double, double> * train_sdm<double>(
-    const flann::Matrix<double> *train_bags, size_t num_train,
-    const std::vector<double> &labels,
-    const npdivs::DivFunc &div_func, const KernelGroup &kernel_group,
-    const npdivs::DivParams &div_params, const std::vector<double> &c_vals,
-    const svm_parameter &svm_params, size_t tuning_folds, double* divs);
-
-
+#define TRANS2_INST(Scalar, label_type) \
+template std::vector<label_type> transduct_sdm<Scalar, label_type>( \
+    const flann::Matrix<Scalar> *train_test_bags, \
+    size_t num_train, size_t num_test, \
+    const std::vector<label_type> &train_labels, \
+    const npdivs::DivFunc &div_func, \
+    const KernelGroup &kernel_group, \
+    const npdivs::DivParams &div_params, \
+    const std::vector<double> &c_vals, \
+    const svm_parameter &svm_params, \
+    size_t tuning_folds, \
+    double *divs);
+TRANS2_INST(float,  int);
+TRANS2_INST(double, int);
+TRANS2_INST(float,  double);
+TRANS2_INST(double, double);
+#undef TRANS2_INST
 
 
 // helper function implementations
