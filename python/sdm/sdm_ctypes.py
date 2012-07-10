@@ -402,6 +402,26 @@ for cls, intype, labtype in _sdm_classes:
             POINTER(c_double),
     ]
 
+# transduction
+transduct = {}
+for cls, intype, labtype in _sdm_classes:
+    transduct[intype, labtype] = fn = _LIB[cls.__name__ + '_transduct']
+    fn.restype = None
+    fn.argtypes = [
+            POINTER(POINTER(intype)), c_size_t, POINTER(c_size_t),
+            POINTER(POINTER(intype)), c_size_t, POINTER(c_size_t),
+            c_size_t,
+            POINTER(labtype),
+            c_char_p,
+            c_char_p,
+            POINTER(DivParams),
+            POINTER(c_double), c_size_t,
+            POINTER(SVMParams),
+            c_size_t,
+            POINTER(c_double),
+            POINTER(labtype),
+    ]
+
 # predict a single item, label only
 predict = {}
 for cls, intype, labtype in _sdm_classes:

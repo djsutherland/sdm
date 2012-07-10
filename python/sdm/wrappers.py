@@ -55,6 +55,8 @@ for pref, c_type in _dtypes:
 c_double_p = POINTER(c_double)
 c_size_t_p = POINTER(c_size_t)
 
+# TODO: check for error conditions in responses
+
 ################################################################################
 ### Parameter checking
 
@@ -95,7 +97,9 @@ def _check_bags(bags, dim=None, _intypes=_intypes):
     return bags, intype, bag_ptrs, bag_rows, dim
 
 def _check_divs(divs, num_bags=None):
-    divs = np.ascontiguousarray(divs, dtype=_c_to_np_types[c_double])
+    # copy divs into row-major contiguous order
+    # copy, so the caller's matrix isn't confusingly messed with
+    divs = np.array(divs, dtype=_c_to_np_types[c_double], copy=True)
     if len(divs.shape) != 2:
         raise ValueError("divs must be 2-dimensional")
     a, b = divs.shape
@@ -349,9 +353,51 @@ def train(bags, labels,
             c_vals_p, num_c_vals,
             svm_params,
             tuning_folds,
-            divs)
+            divs.ctypes.data_as(c_double_p) if divs is not None else None)
 
     return SDM(handle, intype, labtype, dim)
+
+################################################################################
+
+def transduct(train_bags, train_labels, test_bags,
+          div_func='renyi:.9', kernel='gaussian',
+          tuning_folds=3, c_vals=None, divs=None, **kwargs):
+
+    train_bags, intype, train_bag_ptrs, train_bag_rows, dim = \
+            _check_bags(train_bags)
+    train_bag_rows_p = train_bag_rows.ctypes.data_as(c_size_t_p)
+
+    test_bags, _, test_bag_ptrs, test_bag_rows, _ = \
+            _check_bags(test_bags, dim=dim, _intypes=(intype,))
+    test_bag_rows_p = test_bag_rows.ctypes.data_as(c_size_t_p)
+
+    train_labels, labtype = _check_labels(train_labels, len(train_bags))
+    train_labels_p = train_labels.ctypes.data_as(POINTER(labtype))
+
+    if divs is not None:
+        divs = _check_divs(divs, len(train_bags) + len(test_bags))
+
+    flann_p, div_params = _make_flann_div_params(**kwargs)
+    c_vals, c_vals_p, num_c_vals = _check_c_vals(c_vals)
+    svm_params = _make_svm_params(labtype=labtype, **kwargs)
+
+    preds = np.empty(len(test_bags), dtype=_c_to_np_types[labtype])
+    preds_p = preds.ctypes.data_as(POINTER(labtype))
+
+    lib.transduct[intype, labtype](
+            train_bag_ptrs, len(train_bags), train_bag_rows_p,
+            test_bag_ptrs, len(test_bags), test_bag_rows_p,
+            dim, train_labels_p,
+            div_func.encode('ascii'),
+            kernel.encode('ascii'),
+            div_params,
+            c_vals_p, num_c_vals,
+            svm_params,
+            tuning_folds,
+            divs.ctypes.data_as(c_double_p) if divs is not None else None,
+            preds_p)
+
+    return preds
 
 
 ################################################################################

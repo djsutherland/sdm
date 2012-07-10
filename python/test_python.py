@@ -26,20 +26,20 @@ def pbar_wrapper():
             pb[0].finish()
     return inner
 
-dfs = ['renyi:.8', 'hellinger']
-divs = sdm.get_divs(bags, div_funcs=dfs,
+df_kernels = [('renyi:.8', 'gaussian'), ('linear', 'polynomial')]
+divs = sdm.get_divs(bags, div_funcs=[df for df, kernel in df_kernels],
         num_threads=0, cv_threads=0,
         show_progress=50,
         print_progress=pbar_wrapper(),
 )
 
-for df, df_divs in zip(dfs, divs):
-    acc = sdm.crossvalidate_divs(df_divs, labels)
-    print("{} accuracy: {:.0%}".format(df, acc))
+for (df, kernel), df_divs in zip(df_kernels, divs):
+    acc = sdm.crossvalidate_divs(df_divs, labels, kernel=kernel)
+    print("{}/{} accuracy: {:.0%}".format(df, kernel, acc))
 
 print()
 print("Training model")
-sdm.set_log_level('debug')
+sdm.set_log_level('info')
 model = sdm.train(bags, labels)
 print("trained!", model)
 
@@ -53,6 +53,23 @@ print("\nTesting a bunch with dec values:")
 preds, vals = model.predict(test_neg + test_pos, get_dec_values=True)
 print(preds)
 print(vals)
+
+print()
+print("Transducting with linear...")
+preds = sdm.transduct(bags, labels, test_neg + test_pos,
+                      div_func='linear', kernel='linear')
+print(preds)
+
+print()
+trans_divs = sdm.get_divs(bags + test_neg + test_pos, div_funcs=['renyi:1.01'])
+td = trans_divs.copy()
+print("Transducting with precomputed renyi:1.01...")
+preds = sdm.transduct(bags, labels, test_neg + test_pos,
+        div_func='renyi:1.01', divs=trans_divs[0])
+print(preds)
+assert np.all(trans_divs[0] == td)
+
+# TODO: test passing divs in
 
 #model.free()
 #print("freed!")
