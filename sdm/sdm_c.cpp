@@ -228,13 +228,6 @@ Matrix<T> *make_matrices(T ** data,
         if (y_bags == NULL) \
             num_y = num_x; \
         \
-        /* make boost::ptr_vector<DivFunc> */ \
-        boost::ptr_vector<DivFunc> div_funcs; \
-        for (size_t i = 0; i < num_div_specs; i++) { \
-            div_funcs.push_back(npdivs::div_func_from_str( \
-                        std::string(div_specs[i]))); \
-        } \
-        \
         /* make flann::Matrix<double> with results as data */ \
         MatrixD * results_ms = new MatrixD[num_div_specs]; \
         for (size_t i = 0; i < num_div_specs; i++) { \
@@ -242,6 +235,14 @@ Matrix<T> *make_matrices(T ** data,
         } \
         \
         try { \
+            /* make boost::ptr_vector<DivFunc> */ \
+            boost::ptr_vector<DivFunc> div_funcs; \
+            for (size_t i = 0; i < num_div_specs; i++) { \
+                DivFunc * df = \
+                    npdivs::div_func_from_str(std::string(div_specs[i])); \
+                div_funcs.push_back(df); \
+            } \
+            \
             /* call function */ \
             npdivs::np_divs( \
                     x_bags_ms, num_x, \
