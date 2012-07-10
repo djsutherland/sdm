@@ -58,7 +58,7 @@ int main() {
         flann_params,
         1, // num_threads
         3, // how often to print progress
-        NULL
+        NULL // print_progress_to_stderr
     };
 
     double acc = sdm_crossvalidate_classify_double(
@@ -158,7 +158,8 @@ int main() {
                 default_c_vals, num_default_c_vals, &default_svm_params, 2)
         );
 
-    for (int df = 0; df < NUM_DFS; df++) {
+    int df;
+    for (df = 0; df < NUM_DFS; df++) {
         printf("\n\nDivs (%s):\n", dfs[df]);
         for (i = 0; i < NUM_BAGS; i++) {
             for (j = 0; j < NUM_BAGS; j++) {
