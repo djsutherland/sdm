@@ -466,6 +466,7 @@ std::vector<label_type> transduct_sdm(
             train_test_bags, num_train + num_test, train_labels,
             div_func, kernel_group, div_params, c_vals, svm_params,
             tuning_folds, divs, true);
+    FILE_LOG(logDEBUG) << "transduct: trained " << model->name();
 
     // get out the bottom-left block of divs, which is now kernel vals :)
     double test_to_train_kerns[num_test * num_train];
