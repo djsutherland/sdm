@@ -468,19 +468,19 @@ std::vector<label_type> transduct_sdm(
             tuning_folds, divs, true);
 
     // get out the bottom-left block of divs, which is now kernel vals :)
-    double test_to_train_kerns[num_test * num_train];
+    std::vector<double> test_to_train_kerns(num_test * num_train);
     for (size_t i = 0; i < num_test; i++) {
         double * row_start = divs + (num_train + i) * num_bags;
 
         std::copy(row_start, row_start + num_train,
-                  test_to_train_kerns + i * num_train);
+                  test_to_train_kerns.begin() + i * num_train);
     }
 
     // do predictions
     FILE_LOG(logDEBUG) << "transduct: making predictions";
     std::vector<label_type> preds;
     std::vector< std::vector<double> > vals; // TODO: support returning these
-    model->predict_from_kerns(test_to_train_kerns, num_test, preds, vals);
+    model->predict_from_kerns(&test_to_train_kerns[0], num_test, preds, vals);
 
     // clean up
     model->destroyModelAndProb();
