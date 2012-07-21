@@ -83,7 +83,7 @@ extern "C" void dsyev_(char *jobz, char *uplo, int *n, double *a,
 void eig(double* matrix, int n, double* vals, double* vecs, char jobz='V') {
     char uplo = 'U'; // indicate that upper-triangular part of matrix is present
     int info; // indicates whether the call was successful
-    int lwork = 3*n - 1; // size of the work array
+    int lwork = 3*n - 1; // size of the work array  // TODO - tweak?
     double *work = new double[lwork]; // the work array
 
     // copy matrix into vecs, since dsyev_ is in-place
@@ -134,7 +134,7 @@ void spectral_reconstruction(int n, double *eigvals, double *eigvecs,
 
     int step = 1;
 
-    // First do the left-hand side: V * max(dig(D), 0)
+    // First do the left-hand side: V * max(diag(D), 0)
     // Need to scale each column of V by the corresponding eigenvector
     double *leftside = new double[n * n];
     std::copy(eigvecs, eigvecs + n*n, leftside);
