@@ -55,15 +55,19 @@ find_package(Threads)
 
 # let user override boost paths
 set(BOOST_HEADERS CACHE PATH "Header directory for libraries")
+set(BOOST_SYSTEM CACHE PATH "Path to Boost System library")
 set(BOOST_THREAD CACHE PATH "Path to Boost Thread library")
 set(BOOST_PROGRAM_OPTIONS CACHE PATH "Path to Boost Program Options library")
 
-if(BOOST_HEADERS AND BOOST_THREAD AND BOOST_PROGRAM_OPTIONS)
+if(BOOST_HEADERS AND BOOST_SYSTEM AND BOOST_THREAD AND BOOST_PROGRAM_OPTIONS)
 else()
-    find_package(Boost 1.35 COMPONENTS thread program_options REQUIRED)
+    find_package(Boost 1.35 COMPONENTS system thread program_options REQUIRED)
 
     if(NOT BOOST_HEADERS)
         set(BOOST_HEADERS ${Boost_INCLUDE_DIRS})
+    endif()
+    if (NOT BOOST_SYSTEM)
+        set(BOOST_SYSTEM ${Boost_SYSTEM_LIBRARY})
     endif()
     if (NOT BOOST_THREAD)
         set(BOOST_THREAD ${Boost_THREAD_LIBRARY})
